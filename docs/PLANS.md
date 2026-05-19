@@ -4,8 +4,14 @@
 Harness + skeleton TS project + half-block renderer on static image.
 
 ## Phase 2 — MVP (video v0: 3–5s, single shot)
-- ffmpeg pipe → RGB frames → half-block → stdout
-- CLI: `terpix play <video.mp4>`
+
+**Core scenario**: direct character byte-stream playback in the current TTY.
+The pipeline produces ANSI/Unicode bytes per frame and writes them to stdout
+in real time — no GUI, no file output, no remote process. This is the
+defining experience of terpix and must be exercised by every path.
+
+- `terpix demo` — procedural in-process frame source → encoder → TTY (zero deps beyond Node; smoke-test for the byte-stream path)
+- `terpix play <video.mp4>` — ffmpeg → RGB frames → half-block → TTY
 - terminal cap probe + SIGWINCH
 - Plan schema v0: one shot, Ken-Burns via 2 keyframes
 

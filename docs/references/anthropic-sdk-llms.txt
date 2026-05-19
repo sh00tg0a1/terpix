@@ -1,0 +1,11 @@
+Anthropic SDK reference (LLM context dump)
+==========================================
+
+Paste relevant @anthropic-ai/sdk excerpts here. Append-only.
+
+Suggested sections:
+- client init + prompt caching headers
+- streaming vs non-streaming messages.create
+- tool use / structured output via JSON mode
+- model IDs (claude-sonnet-4-6, claude-opus-4-7)
+- retry/backoff conventions

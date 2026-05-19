@@ -1,0 +1,27 @@
+task:
+  id: planner-spaceship-nebula
+  desc: |
+    Given the prompt "宇宙飞船穿越星云" with duration 20s, the planner must
+    produce a valid scene plan where: (1) all shots together cover ~20s
+    (±500ms); (2) each shot's imagePrompt mentions either spaceship/spacecraft
+    or nebula/space imagery in any language; (3) JSON parses against scene-plan
+    schema v1.
+  suite: capability
+  inputs:
+    prompt: "宇宙飞船穿越星云"
+    duration_ms: 20000
+    seed: 42
+  graders:
+    - type: deterministic_tests
+      required: [tests/evals/planner-schema.test.ts]
+    - type: state_check
+      expect:
+        total_duration_ms_within: [19500, 20500]
+        shot_count_within: [3, 8]
+    - type: llm_rubric
+      rubric: docs/evals/graders/rubrics.md#prompt-fidelity
+  tracked_metrics:
+    - type: transcript
+      metrics: [n_total_tokens]
+    - type: latency
+      metrics: [time_to_last_token]

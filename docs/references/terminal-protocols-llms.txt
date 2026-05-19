@@ -1,0 +1,13 @@
+Terminal protocols reference (LLM context dump)
+================================================
+
+Background lives in /terminal_pixel_renderer_notes.md. Append vendor specs here.
+
+Suggested sections:
+- ANSI truecolor: \x1b[38;2;R;G;Bm fg, \x1b[48;2;R;G;Bm bg
+- half-block char: ▀ U+2580
+- braille block: U+2800..U+28FF; bit layout 1,4,2,5,3,6,7,8
+- sixel: DCS Pp;Pa;Ph q ... ST; six-pixel column encoding
+- kitty graphics: \x1b_G<keys>;<base64-payload>\x1b\\
+- DA2 query: \x1b[>c
+- cursor save/restore, alt-screen 1049

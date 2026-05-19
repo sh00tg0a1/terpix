@@ -1,0 +1,11 @@
+ffmpeg reference (LLM context dump)
+====================================
+
+Paste vendor docs, flag tables, encoder option references here. Append-only.
+
+Suggested sections:
+- decode-to-raw-rgb: ffmpeg -i in -f rawvideo -pix_fmt rgba pipe:1
+- encode-from-raw-rgb: ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r FPS -i pipe:0 -c:v libx264 -pix_fmt yuv420p out.mp4
+- scale filter: -vf scale=W:H:flags=lanczos
+- audio extract: -vn / -an switches
+- common errors: "moov atom not found", "Invalid data found"

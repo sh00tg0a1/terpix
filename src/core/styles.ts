@@ -88,14 +88,23 @@ function applyDuotone(buf: PixelBuffer, [bgHex, fgHex]: [string, string]): void 
   const bgL = luma(bg[0], bg[1], bg[2]);
   const fgL = luma(fg[0], fg[1], fg[2]);
   const mid = (bgL + fgL) / 2;
-  for (let i = 0; i < buf.rgba.length; i += 4) {
-    const l = getLuma(buf.rgba, i);
-    // If foreground is darker than background, the comparison flips.
-    const isFg = fgL < bgL ? l < mid : l > mid;
-    const c = isFg ? fg : bg;
-    buf.rgba[i] = c[0];
-    buf.rgba[i + 1] = c[1];
-    buf.rgba[i + 2] = c[2];
+  const rgba = buf.rgba;
+  const fgDarker = fgL < bgL;
+  const fgR = fg[0], fgG = fg[1], fgB = fg[2];
+  const bgR = bg[0], bgG = bg[1], bgB = bg[2];
+  // Hot loop: inlined luma; avoid function call + array allocation per pixel.
+  for (let i = 0; i < rgba.length; i += 4) {
+    const l = 0.299 * rgba[i]! + 0.587 * rgba[i + 1]! + 0.114 * rgba[i + 2]!;
+    const isFg = fgDarker ? l < mid : l > mid;
+    if (isFg) {
+      rgba[i] = fgR;
+      rgba[i + 1] = fgG;
+      rgba[i + 2] = fgB;
+    } else {
+      rgba[i] = bgR;
+      rgba[i + 1] = bgG;
+      rgba[i + 2] = bgB;
+    }
   }
 }
 

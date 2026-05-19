@@ -198,6 +198,13 @@ function drawTextBlock(
   centerX: boolean,
 ): void {
   const lines = text.split('\n');
+  const bw = buf.w;
+  const bh = buf.h;
+  const rgba = buf.rgba;
+  const r = color[0], g = color[1], b = color[2];
+  const opaque = alpha >= 255;
+  const ta = alpha / 255;
+  const tInv = 1 - ta;
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li]!.toUpperCase();
     const lineWidth = line.length * 6 * px;
@@ -206,15 +213,39 @@ function drawTextBlock(
     for (let ci = 0; ci < line.length; ci++) {
       const ch = line[ci]!;
       const glyph = FONT5x7[ch] ?? FONT5x7[' ']!;
+      const charX = startX + ci * 6 * px;
       for (let gy = 0; gy < 7; gy++) {
         const row = glyph[gy]!;
+        const glyphY0 = (lineY + gy * px) | 0;
         for (let gx = 0; gx < 5; gx++) {
-          if (row[gx] !== '1') continue;
-          for (let dy = 0; dy < px; dy++) {
-            for (let dx = 0; dx < px; dx++) {
-              const x = Math.floor(startX + ci * 6 * px + gx * px + dx);
-              const y = Math.floor(lineY + gy * px + dy);
-              setPixelDirect(buf, x, y, color[0], color[1], color[2], alpha);
+          if (row.charCodeAt(gx) !== 0x31) continue; // '1'
+          const glyphX0 = (charX + gx * px) | 0;
+          // Inline fill of the px*px sub-block; bounds-clip per row/col.
+          const x0 = glyphX0 < 0 ? 0 : glyphX0;
+          const x1 = glyphX0 + px > bw ? bw : glyphX0 + px;
+          const y0 = glyphY0 < 0 ? 0 : glyphY0;
+          const y1 = glyphY0 + px > bh ? bh : glyphY0 + px;
+          if (opaque) {
+            for (let py = y0; py < y1; py++) {
+              const rowStart = py * bw * 4;
+              for (let pxn = x0; pxn < x1; pxn++) {
+                const idx = rowStart + pxn * 4;
+                rgba[idx] = r;
+                rgba[idx + 1] = g;
+                rgba[idx + 2] = b;
+                rgba[idx + 3] = 255;
+              }
+            }
+          } else {
+            for (let py = y0; py < y1; py++) {
+              const rowStart = py * bw * 4;
+              for (let pxn = x0; pxn < x1; pxn++) {
+                const idx = rowStart + pxn * 4;
+                rgba[idx] = (rgba[idx]! * tInv + r * ta) | 0;
+                rgba[idx + 1] = (rgba[idx + 1]! * tInv + g * ta) | 0;
+                rgba[idx + 2] = (rgba[idx + 2]! * tInv + b * ta) | 0;
+                rgba[idx + 3] = 255;
+              }
             }
           }
         }

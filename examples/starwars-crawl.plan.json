@@ -33,19 +33,11 @@
       "layers": [
         {
           "type": "text",
-          "content": "STAR",
+          "content": "STAR\nWARS",
           "style": "static",
           "color": "#ffd633",
           "size": "lg",
-          "position": { "x": 0.5, "y": 0.38 }
-        },
-        {
-          "type": "text",
-          "content": "WARS",
-          "style": "static",
-          "color": "#ffd633",
-          "size": "lg",
-          "position": { "x": 0.5, "y": 0.58 }
+          "position": { "x": 0.5, "y": 0.35 }
         }
       ]
     },

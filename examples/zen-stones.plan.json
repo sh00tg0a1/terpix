@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "title": "Minimal zen stones at dawn",
+  "fps": 24,
+  "style": "minimalist",
+  "shots": [
+    {
+      "id": "stillness",
+      "durationMs": 8000,
+      "background": {
+        "type": "gradient",
+        "from": "#f6f3ec",
+        "to": "#e7dfd0",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "sprite",
+          "asset": "mountain",
+          "color": "#888888",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.18, "y": 0.62, "scale": 0.9, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "mountain",
+          "color": "#888888",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.42, "y": 0.66, "scale": 0.7, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "mountain",
+          "color": "#888888",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.62, "y": 0.69, "scale": 0.55, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "moon",
+          "color": "#cccccc",
+          "ease": "easeOut",
+          "keyframes": [
+            { "tMs": 0,    "x": 0.78, "y": 0.36, "scale": 1.1, "opacity": 0.6 },
+            { "tMs": 8000, "x": 0.78, "y": 0.30, "scale": 1.1, "opacity": 1.0 }
+          ]
+        },
+        {
+          "type": "text",
+          "content": "STILLNESS",
+          "style": "fade-in",
+          "color": "#1f2933",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.92 }
+        }
+      ]
+    }
+  ]
+}

@@ -121,6 +121,8 @@ function drawTextLayer(
     const baseY = buf.h - t * (buf.h + shown.length * px);
     drawTextBlock(buf, shown, layer.position.x * buf.w, baseY, px, color, alpha, true);
   } else {
+    // Treat position as the text-center anchor: a long word at x=0.5 should
+    // straddle the middle, not start at the middle and run off the right edge.
     drawTextBlock(
       buf,
       shown,
@@ -129,7 +131,7 @@ function drawTextLayer(
       px,
       color,
       alpha,
-      false,
+      true,
     );
   }
 }

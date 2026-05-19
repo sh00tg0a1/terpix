@@ -71,6 +71,14 @@ export const Shot = z.object({
   layers: z.array(Layer).default([]),
 });
 
+export const StylePresetName = z.enum([
+  'default',
+  'starwars',
+  'minimalist',
+  'silhouette',
+  'noir',
+]);
+
 export const ScenePlan = z.object({
   version: z.literal(1),
   title: z.string().default(''),
@@ -78,6 +86,7 @@ export const ScenePlan = z.object({
   size: z
     .object({ w: z.number().int().positive(), h: z.number().int().positive() })
     .optional(),
+  style: StylePresetName.optional(),
   shots: z.array(Shot).min(1),
 });
 

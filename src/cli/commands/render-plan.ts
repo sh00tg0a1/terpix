@@ -2,9 +2,11 @@ import { composite } from '../../core/compositor.js';
 import { loadPlanFromFile } from '../../core/plan-loader.js';
 import { HalfBlockEncoder } from '../../adapters/terminal/half-block.js';
 import { TerminalDriver, probeCaps } from '../../adapters/terminal/driver.js';
+import { StylePresetName } from '../../core/dsl.js';
 
 export interface RenderPlanOpts {
   path: string;
+  style?: string;
 }
 
 export async function renderPlan(opts: RenderPlanOpts): Promise<void> {
@@ -20,6 +22,14 @@ export async function renderPlan(opts: RenderPlanOpts): Promise<void> {
     process.exit(1);
   }
   const plan = result.plan;
+  if (opts.style) {
+    const parsed = StylePresetName.safeParse(opts.style);
+    if (!parsed.success) {
+      console.error(`terpix render-plan: unknown style '${opts.style}'. Try: default | starwars | minimalist | silhouette | noir`);
+      process.exit(1);
+    }
+    plan.style = parsed.data;
+  }
 
   const caps = probeCaps();
   const encoder = new HalfBlockEncoder();

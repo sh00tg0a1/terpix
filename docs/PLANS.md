@@ -45,7 +45,13 @@ defining experience of terpix and must be exercised by every path.
 - LLM registry auto-extends (Phase 3.2 picks them up via asset-catalog).
 - `terpix asset list` shows source (`builtin` / `shape`); `add / remove / preview` still planned.
 
-## Phase 4 — User assets continued + encoder modes
+## Phase 4 — Style + encoder modes + more user assets
+
+### 4.0 — Style system ✅
+- Plan-wide `style` field: default / starwars / minimalist / silhouette / noir.
+- Post-process: duotone quantization + 4-neighbor edge detection.
+- `--style <name>` CLI override.
+- See [design-docs/style-system.md](design-docs/style-system.md).
 
 ### 4.1 — Encoder modes
 ascii, block, braille, half (default complete). Mode selection CLI flag. Cap auto-probe.
@@ -57,6 +63,10 @@ ascii, block, braille, half (default complete). Mode selection CLI flag. Cap aut
 ### 4.3 — Primitive composition layer (`shape` layer type)
 - DSL gains a `shape` layer that LLM can compose ad-hoc from triangles / circles / lines.
 - Bridges the gap between built-in sprites and image-gen — unlimited shapes, no API costs.
+
+### 4.4 — Per-asset line geometry variants
+- Sprites with known outline geometry implement native `line` mode (stroke triangle/circle).
+- Beats edge-detect quality for known sprites; falls back to edge-detect for shape-json/bitmap.
 
 ## Phase 5 — Export + user plugin assets
 

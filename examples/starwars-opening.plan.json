@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "title": "A long time ago in a terminal far far away",
+  "fps": 24,
+  "style": "starwars",
+  "shots": [
+    {
+      "id": "preface",
+      "durationMs": 4000,
+      "background": { "type": "solid", "color": "#000000" },
+      "layers": [
+        {
+          "type": "text",
+          "content": "A LONG TIME AGO IN A\nGALAXY FAR FAR AWAY",
+          "style": "fade-in",
+          "color": "#3366ff",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.4 }
+        }
+      ]
+    },
+    {
+      "id": "logo",
+      "durationMs": 3500,
+      "background": { "type": "starfield", "density": 0.005, "seed": 42 },
+      "layers": [
+        {
+          "type": "text",
+          "content": "STAR WARS",
+          "style": "static",
+          "color": "#ffd633",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.5 }
+        }
+      ]
+    },
+    {
+      "id": "crawl",
+      "durationMs": 9000,
+      "background": { "type": "starfield", "density": 0.008, "seed": 13 },
+      "layers": [
+        {
+          "type": "text",
+          "content": "EPISODE TERPIX\n\nIT IS A DARK TIME\nFOR THE TERMINAL.\nA NEW HOPE EMERGES\nFROM THE CHAR STREAM.",
+          "style": "crawl",
+          "color": "#ffd633",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.5 }
+        }
+      ]
+    }
+  ]
+}

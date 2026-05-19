@@ -49,8 +49,9 @@ program
   .command('render-plan')
   .description('Render a JSON scene plan to the terminal (DSL → compositor → encoder)')
   .argument('<path>', 'path to a JSON plan file')
-  .action(async (path: string) => {
-    await renderPlan({ path });
+  .option('--style <name>', 'override plan style: default|starwars|minimalist|silhouette|noir')
+  .action(async (path: string, opts: { style?: string }) => {
+    await renderPlan({ path, ...(opts.style ? { style: opts.style } : {}) });
   });
 
 program

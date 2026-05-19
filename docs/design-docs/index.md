@@ -9,3 +9,4 @@
 | [procedural-compositor.md](procedural-compositor.md) | Why procedural+layered; per-frame composition model | active |
 | [asset-system.md](asset-system.md) | Extensible asset registry; shape-json / bitmap-png / plugin-ts formats | active |
 | [llm-integration.md](llm-integration.md) | Anthropic tool_use; derived system prompt; prompt cache; retry policy | active |
+| [style-system.md](style-system.md) | Style presets (starwars / minimalist / silhouette / noir / default); duotone + edge post-process | active |

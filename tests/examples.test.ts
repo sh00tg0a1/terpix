@@ -11,6 +11,8 @@ const examples = [
   'superman-flying.plan.json',
   'fox-intro.plan.json',
   'cat-on-roof.plan.json',
+  'zen-stones.plan.json',
+  'starwars-opening.plan.json',
 ];
 
 describe('example plans', () => {

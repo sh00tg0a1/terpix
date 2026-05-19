@@ -113,7 +113,6 @@ describe('HalfBlockEncoder', () => {
 
   it('uses FULL BLOCK (█) when top and bottom pixel are the same color', () => {
     const enc = new HalfBlockEncoder();
-    // Solid red over solid red cell.
     const bytes = enc.encode(
       frame(2, 2, [
         [255, 0, 0], [255, 0, 0],
@@ -122,10 +121,10 @@ describe('HalfBlockEncoder', () => {
     );
     const text = new TextDecoder().decode(bytes);
     expect(text).toContain('█');
-    // No background color emission — full block does not need a bg.
-    expect(text).not.toContain('\x1b[48;');
-    // Foreground emitted once (coalesced).
+    // bg = fg for solid cells (prevents terminal default bg leaking through).
+    expect(text).toContain('\x1b[48;2;255;0;0m');
     expect(text.match(/\x1b\[38;2;255;0;0m/g)?.length).toBe(1);
+    expect(text.match(/\x1b\[48;2;255;0;0m/g)?.length).toBe(1);
     expect(text.match(/█/g)?.length).toBe(2);
   });
 

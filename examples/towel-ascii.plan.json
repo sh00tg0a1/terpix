@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "title": "Towel.blinkenlights.nl-style scene",
+  "fps": 12,
+  "renderer": "ascii",
+  "shots": [
+    {
+      "id": "scene",
+      "durationMs": 6000,
+      "background": {
+        "type": "solid",
+        "color": "#000000"
+      },
+      "layers": [
+        {
+          "type": "text",
+          "content": " _____\n|  o  |\n| === |\n|_____|\n |_|_|",
+          "style": "static",
+          "color": "#cccccc",
+          "size": "sm",
+          "position": { "x": 0.28, "y": 0.5 }
+        },
+        {
+          "type": "text",
+          "content": "  ___\n |. .|\n \\_-_/\n /|=|\\\n  |=|\n  |=|\n /| |\\\nd_b d_b",
+          "style": "static",
+          "color": "#dddddd",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.45 }
+        },
+        {
+          "type": "text",
+          "content": "too",
+          "style": "static",
+          "color": "#888888",
+          "size": "sm",
+          "position": { "x": 0.62, "y": 0.32 }
+        },
+        {
+          "type": "text",
+          "content": "Did you hear that?",
+          "style": "typewriter",
+          "color": "#ffffff",
+          "size": "sm",
+          "position": { "x": 0.78, "y": 0.45 }
+        },
+        {
+          "type": "text",
+          "content": "Telnet towel.blinkenlights.nl",
+          "style": "static",
+          "color": "#888888",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.05 }
+        }
+      ]
+    }
+  ]
+}

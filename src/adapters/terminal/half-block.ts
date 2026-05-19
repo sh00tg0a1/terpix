@@ -94,16 +94,21 @@ export class HalfBlockEncoder implements Encoder {
           skipCount = 0;
         }
 
-        // Solid-color cells use FULL BLOCK so the font's ▀ inter-row gap
-        // does not show as a scanline. For solid cells, only fg color matters.
+        // Always emit fg AND bg explicitly. For solid cells (top == bot) we
+        // also set bg to the same color so the terminal's default background
+        // cannot leak through font line-height gaps as a scanline. Use █ for
+        // solid and ▀ for split cells.
         const solid = tR === bR && tG === bG && tB === bB;
+        const wantBgR = solid ? tR : bR;
+        const wantBgG = solid ? tG : bG;
+        const wantBgB = solid ? tB : bB;
         if (tR !== curFgR || tG !== curFgG || tB !== curFgB) {
           writeAnsiColor(out, 38, tR, tG, tB);
           curFgR = tR; curFgG = tG; curFgB = tB;
         }
-        if (!solid && (bR !== curBgR || bG !== curBgG || bB !== curBgB)) {
-          writeAnsiColor(out, 48, bR, bG, bB);
-          curBgR = bR; curBgG = bG; curBgB = bB;
+        if (wantBgR !== curBgR || wantBgG !== curBgG || wantBgB !== curBgB) {
+          writeAnsiColor(out, 48, wantBgR, wantBgG, wantBgB);
+          curBgR = wantBgR; curBgG = wantBgG; curBgB = wantBgB;
         }
         out.push(...(solid ? FULL_BLOCK_BYTES : HALF_BLOCK_BYTES));
       }

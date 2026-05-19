@@ -57,7 +57,7 @@ Edges flow `cli → adapters → core`. Core never imports adapters.
 | sixel | DCS sixel | medium | high |
 | kitty | kitty graphics proto | low | very high |
 
-Default `half`. See [docs/design-docs/encoder-strategy.md](docs/design-docs/encoder-strategy.md) and [terminal_pixel_renderer_notes.md](terminal_pixel_renderer_notes.md).
+Default `half`. See [docs/design-docs/encoder-strategy.md](docs/design-docs/encoder-strategy.md) and [docs/ref/terminal_pixel_renderer_notes.md](docs/ref/terminal_pixel_renderer_notes.md).
 
 ## Related
 

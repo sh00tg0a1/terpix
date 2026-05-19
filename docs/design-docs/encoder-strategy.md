@@ -1,6 +1,6 @@
 # Encoder strategy
 
-Six backends. One default. See full background in [/terminal_pixel_renderer_notes.md](../../terminal_pixel_renderer_notes.md).
+Six backends. One default. See full background in [/terminal_pixel_renderer_notes.md](../ref/terminal_pixel_renderer_notes.md).
 
 ## Selection precedence
 
@@ -29,7 +29,7 @@ Per-cell diff against previous frame; only emit cursor-move + char for changed c
 
 ## Mode comparison
 
-See [/terminal_pixel_renderer_notes.md §6](../../terminal_pixel_renderer_notes.md) table.
+See [/terminal_pixel_renderer_notes.md §6](../ref/terminal_pixel_renderer_notes.md) table.
 
 ## Open questions
 

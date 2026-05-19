@@ -1,0 +1,46 @@
+{
+  "name": "terpix",
+  "version": "0.0.1",
+  "description": "NL-driven terminal character-stream movie renderer",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/cli/index.ts",
+    "test:watch": "vitest",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sh00tg0a1/terpix.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/sh00tg0a1/terpix/issues"
+  },
+  "homepage": "https://github.com/sh00tg0a1/terpix#readme",
+  "bin": {
+    "terpix": "dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "eslint": "^9.39.4",
+    "prettier": "^3.8.3",
+    "tsup": "^8.5.1",
+    "tsx": "^4.22.3",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "zod": "^3.25.76"
+  }
+}

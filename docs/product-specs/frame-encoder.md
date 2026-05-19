@@ -40,4 +40,4 @@ Pure. Diff against `prev` produces minimal escape stream.
 ## Reference
 
 - [docs/design-docs/encoder-strategy.md](../design-docs/encoder-strategy.md)
-- [/terminal_pixel_renderer_notes.md](../../terminal_pixel_renderer_notes.md)
+- [docs/ref/terminal_pixel_renderer_notes.md](../ref/terminal_pixel_renderer_notes.md)

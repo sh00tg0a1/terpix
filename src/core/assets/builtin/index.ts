@@ -1,4 +1,4 @@
-import { registerAsset } from '../registry.js';
+import { getAsset, registerAsset } from '../registry.js';
 import { drawSpaceship } from './spaceship.js';
 import { drawPlanet } from './planet.js';
 import { drawMoon } from './moon.js';
@@ -7,11 +7,8 @@ import { drawMountain } from './mountain.js';
 import { drawTree } from './tree.js';
 import { drawSuperman } from './superman.js';
 
-let registered = false;
-
 export function registerBuiltins(): void {
-  if (registered) return;
-  registered = true;
+  if (getAsset('spaceship')?.source === 'builtin') return;
   registerAsset({
     name: 'spaceship',
     description: 'a sleek triangular spacecraft with a thrust trail facing right',

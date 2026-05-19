@@ -26,6 +26,14 @@
           "count": 80,
           "origin": { "x": 0.8, "y": 1.0 },
           "seed": 19
+        },
+        {
+          "type": "text",
+          "content": "A TERPIX PRODUCTION",
+          "style": "fade-in",
+          "color": "#ddc070",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.5 }
         }
       ]
     },

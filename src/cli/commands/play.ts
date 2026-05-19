@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import { decodeFrames } from '../../adapters/ffmpeg/decoder.js';
 import { HalfBlockEncoder } from '../../adapters/terminal/half-block.js';
 import { TerminalDriver, probeCaps } from '../../adapters/terminal/driver.js';
+import { computeRenderSize } from '../render-size.js';
+import type { RGBFrame } from '../../core/types.js';
 
 export interface PlayOpts {
   fps: number;
@@ -23,17 +25,14 @@ export async function play(input: string, opts: PlayOpts): Promise<void> {
   }
 
   const encoder = new HalfBlockEncoder();
-  const cols = caps.cols;
-  const rows = Math.max(2, caps.rows - 1);
-  const targetW = cols * encoder.cellRatio.w;
-  const targetH = rows * encoder.cellRatio.h;
-  const evenH = targetH % 2 === 0 ? targetH : targetH - 1;
+  const { w: targetW, h: evenH } = computeRenderSize(encoder.cellRatio);
 
   const driver = new TerminalDriver();
   driver.start();
 
   const startedAt = Date.now();
   let lastWriteAt = startedAt;
+  let prevFrame: RGBFrame | undefined;
 
   try {
     for await (const frame of decodeFrames({
@@ -46,9 +45,10 @@ export async function play(input: string, opts: PlayOpts): Promise<void> {
       const now = Date.now();
       const wait = targetMs - now;
       if (wait > 1) await new Promise((r) => setTimeout(r, wait));
-      else if (wait < -100) continue; // drop frame: behind by >100ms
-      const bytes = encoder.encode(frame);
+      else if (wait < -100) continue;
+      const bytes = encoder.encode(frame, prevFrame);
       await driver.writeFrame(bytes);
+      prevFrame = frame;
       lastWriteAt = Date.now();
     }
   } finally {

@@ -65,4 +65,49 @@ describe('HalfBlockEncoder', () => {
       '\x1b[0m';
     expect(text).toBe(expected);
   });
+
+  it('coalesces consecutive same-color cells (single fg+bg emit per run)', () => {
+    const enc = new HalfBlockEncoder();
+    const bytes = enc.encode(
+      frame(4, 2, [
+        [255, 0, 0], [255, 0, 0], [255, 0, 0], [255, 0, 0],
+        [0, 0, 255], [0, 0, 255], [0, 0, 255], [0, 0, 255],
+      ]),
+    );
+    const text = new TextDecoder().decode(bytes);
+    expect(text.match(/\x1b\[38;2;255;0;0m/g)?.length).toBe(1);
+    expect(text.match(/\x1b\[48;2;0;0;255m/g)?.length).toBe(1);
+    expect(text.match(/▀/g)?.length).toBe(4);
+  });
+
+  it('skips unchanged cells when prev frame supplied (cursor-forward)', () => {
+    const enc = new HalfBlockEncoder();
+    const f1 = frame(3, 2, [
+      [255, 0, 0], [0, 255, 0], [0, 0, 255],
+      [10, 10, 10], [20, 20, 20], [30, 30, 30],
+    ]);
+    const f2 = frame(3, 2, [
+      [255, 0, 0], [9, 9, 9], [0, 0, 255],
+      [10, 10, 10], [99, 99, 99], [30, 30, 30],
+    ]);
+    const bytes = enc.encode(f2, f1);
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain('\x1b[1C');
+    expect(text).toContain('\x1b[38;2;9;9;9m');
+    expect(text).toContain('\x1b[48;2;99;99;99m');
+    expect(text).not.toContain('\x1b[38;2;255;0;0m');
+  });
+
+  it('falls back to full repaint when prev shape mismatches', () => {
+    const enc = new HalfBlockEncoder();
+    const f1 = frame(2, 2, [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+    const f2 = frame(4, 2, [
+      [1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12],
+      [13, 14, 15], [16, 17, 18], [19, 20, 21], [22, 23, 24],
+    ]);
+    const bytes = enc.encode(f2, f1);
+    const text = new TextDecoder().decode(bytes);
+    expect(text).not.toContain('\x1b[1C');
+    expect(text.match(/▀/g)?.length).toBe(4);
+  });
 });

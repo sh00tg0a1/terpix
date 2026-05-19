@@ -13,6 +13,7 @@ const examples = [
   'cat-on-roof.plan.json',
   'zen-stones.plan.json',
   'starwars-opening.plan.json',
+  'starwars-crawl.plan.json',
 ];
 
 describe('example plans', () => {

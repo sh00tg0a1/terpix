@@ -35,22 +35,29 @@ export async function renderPlan(opts: RenderPlanOpts): Promise<void> {
   const encoder = new HalfBlockEncoder();
   const cols = caps.cols;
   const rows = Math.max(2, caps.rows - 1);
-  const targetW = (plan.size?.w ?? cols) * encoder.cellRatio.w;
-  const targetHRaw = (plan.size?.h ?? rows) * encoder.cellRatio.h;
+  // Cap render width to keep ANSI byte volume manageable on big terminals.
+  // Each cell ≈ 30 bytes; 160 cells × 24 fps ≈ 115 KB/s before diff/coalesce.
+  const MAX_RENDER_COLS = parseInt(process.env['TERPIX_MAX_COLS'] ?? '160', 10);
+  const effCols = plan.size ? plan.size.w : Math.min(cols, MAX_RENDER_COLS);
+  const effRows = plan.size ? plan.size.h : rows;
+  const targetW = effCols * encoder.cellRatio.w;
+  const targetHRaw = effRows * encoder.cellRatio.h;
   const targetH = targetHRaw % 2 === 0 ? targetHRaw : targetHRaw - 1;
 
   const driver = new TerminalDriver();
   driver.start();
 
   const startedAt = Date.now();
+  let prevFrame: import('../../core/types.js').RGBFrame | undefined;
   try {
     for await (const frame of composite(plan, { w: targetW, h: targetH, fps: plan.fps })) {
       const targetMs = startedAt + frame.ptsMs;
       const wait = targetMs - Date.now();
       if (wait > 1) await new Promise((r) => setTimeout(r, wait));
       else if (wait < -100) continue;
-      const bytes = encoder.encode(frame);
+      const bytes = encoder.encode(frame, prevFrame);
       await driver.writeFrame(bytes);
+      prevFrame = frame;
     }
   } finally {
     driver.stop();

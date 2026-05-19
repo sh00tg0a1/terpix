@@ -2,6 +2,7 @@ import { createBuffer, type PixelBuffer } from './pixel.js';
 import { paintBackground } from './backgrounds.js';
 import { findNearestName, getAsset } from './assets/registry.js';
 import { ease, hexToRgb, lerp, mulberry32, type Ease } from './math.js';
+import { applyStyle, resolveStyle } from './styles.js';
 import type { KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
 import type { RGBFrame } from './types.js';
 
@@ -13,14 +14,19 @@ export interface ComposeOpts {
 
 export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGenerator<RGBFrame> {
   const { w, h, fps } = opts;
+  const style = resolveStyle(plan.style);
   let baseMs = 0;
   for (const shot of plan.shots) {
     const totalFrames = Math.ceil((shot.durationMs / 1000) * fps);
+    const effectiveBackground = style.forceBackground
+      ? ({ type: 'solid' as const, color: style.forceBackground })
+      : shot.background;
     for (let f = 0; f < totalFrames; f++) {
       const shotTMs = Math.round((f * 1000) / fps);
       const buf = createBuffer(w, h);
-      paintBackground(buf, shot.background, shotTMs);
+      paintBackground(buf, effectiveBackground, shotTMs);
       for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot);
+      applyStyle(buf, style);
       yield { w, h, ptsMs: baseMs + shotTMs, rgba: buf.rgba };
     }
     baseMs += shot.durationMs;

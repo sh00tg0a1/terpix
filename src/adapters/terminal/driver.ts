@@ -50,7 +50,11 @@ export class TerminalDriver {
   }
 
   async writeFrame(bytes: Uint8Array): Promise<void> {
-    if (!this.out.write(bytes)) {
+    const corkable = this.out as unknown as { cork?: () => void; uncork?: () => void };
+    if (typeof corkable.cork === 'function') corkable.cork();
+    const ok = this.out.write(bytes);
+    if (typeof corkable.uncork === 'function') corkable.uncork();
+    if (!ok) {
       await new Promise<void>((resolve) => this.out.once('drain', resolve));
     }
   }

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "title": "Star Wars opening — pure text",
+  "fps": 24,
+  "shots": [
+    {
+      "id": "preface",
+      "durationMs": 5000,
+      "background": { "type": "solid", "color": "#000000" },
+      "layers": [
+        {
+          "type": "text",
+          "content": "A LONG TIME AGO",
+          "style": "fade-in",
+          "color": "#4a86ff",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.38 }
+        },
+        {
+          "type": "text",
+          "content": "IN A GALAXY FAR FAR AWAY",
+          "style": "fade-in",
+          "color": "#4a86ff",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.52 }
+        }
+      ]
+    },
+    {
+      "id": "title",
+      "durationMs": 5000,
+      "background": { "type": "starfield", "density": 0.004, "seed": 42 },
+      "layers": [
+        {
+          "type": "text",
+          "content": "STAR",
+          "style": "static",
+          "color": "#ffd633",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.38 }
+        },
+        {
+          "type": "text",
+          "content": "WARS",
+          "style": "static",
+          "color": "#ffd633",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.58 }
+        }
+      ]
+    },
+    {
+      "id": "crawl",
+      "durationMs": 14000,
+      "background": { "type": "starfield", "density": 0.007, "seed": 13 },
+      "layers": [
+        {
+          "type": "text",
+          "content": "EPISODE TERPIX\nA NEW HOPE\n\nIT IS A DARK TIME\nFOR THE TERMINAL.\n\nIMPERIAL GUI APPS\nTIGHTEN THEIR GRIP\nON THE GALAXY.\n\nA SMALL BAND OF REBELS\nFIGHTS ON IN THE\nCHARACTER STREAM\nFAR FAR AWAY.\n\nMAY THE PIXELS\nBE WITH YOU.",
+          "style": "crawl",
+          "color": "#ffd633",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.5 }
+        }
+      ]
+    }
+  ]
+}

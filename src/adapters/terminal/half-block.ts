@@ -2,7 +2,12 @@ import type { Encoder } from '../../core/encoder.js';
 import type { CellRatio, RGBFrame } from '../../core/types.js';
 
 const ESC = 0x1b;
+// ▀ = U+2580 UPPER HALF BLOCK — for cells with top ≠ bottom color (fg/bg shows split).
+// █ = U+2588 FULL BLOCK — for cells with top == bottom (paints whole cell in fg color).
+// Using █ for solid-color cells avoids the tiny inter-row gap many terminal fonts
+// render around ▀ at the top/bottom edge, which appears as a thin horizontal scanline.
 const HALF_BLOCK_BYTES = new TextEncoder().encode('▀');
+const FULL_BLOCK_BYTES = new TextEncoder().encode('█');
 const NEWLINE = new TextEncoder().encode('\r\n');
 const RESET = new TextEncoder().encode('\x1b[0m');
 const CURSOR_HOME = new TextEncoder().encode('\x1b[H');
@@ -89,16 +94,18 @@ export class HalfBlockEncoder implements Encoder {
           skipCount = 0;
         }
 
-        // Same-color coalescing across consecutive cells on this row.
+        // Solid-color cells use FULL BLOCK so the font's ▀ inter-row gap
+        // does not show as a scanline. For solid cells, only fg color matters.
+        const solid = tR === bR && tG === bG && tB === bB;
         if (tR !== curFgR || tG !== curFgG || tB !== curFgB) {
           writeAnsiColor(out, 38, tR, tG, tB);
           curFgR = tR; curFgG = tG; curFgB = tB;
         }
-        if (bR !== curBgR || bG !== curBgG || bB !== curBgB) {
+        if (!solid && (bR !== curBgR || bG !== curBgG || bB !== curBgB)) {
           writeAnsiColor(out, 48, bR, bG, bB);
           curBgR = bR; curBgG = bG; curBgB = bB;
         }
-        out.push(...HALF_BLOCK_BYTES);
+        out.push(...(solid ? FULL_BLOCK_BYTES : HALF_BLOCK_BYTES));
       }
       // End-of-row: only reset if we drew anything to leave a clean state.
       out.push(...RESET);

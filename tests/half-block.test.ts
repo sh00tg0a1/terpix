@@ -110,4 +110,38 @@ describe('HalfBlockEncoder', () => {
     expect(text).not.toContain('\x1b[1C');
     expect(text.match(/▀/g)?.length).toBe(4);
   });
+
+  it('uses FULL BLOCK (█) when top and bottom pixel are the same color', () => {
+    const enc = new HalfBlockEncoder();
+    // Solid red over solid red cell.
+    const bytes = enc.encode(
+      frame(2, 2, [
+        [255, 0, 0], [255, 0, 0],
+        [255, 0, 0], [255, 0, 0],
+      ]),
+    );
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain('█');
+    // No background color emission — full block does not need a bg.
+    expect(text).not.toContain('\x1b[48;');
+    // Foreground emitted once (coalesced).
+    expect(text.match(/\x1b\[38;2;255;0;0m/g)?.length).toBe(1);
+    expect(text.match(/█/g)?.length).toBe(2);
+  });
+
+  it('mixed solid + split cells use █ and ▀ respectively', () => {
+    const enc = new HalfBlockEncoder();
+    // Cell 0: top=red, bot=red (solid) → █
+    // Cell 1: top=red, bot=blue (split) → ▀
+    const bytes = enc.encode(
+      frame(2, 2, [
+        [255, 0, 0], [255, 0, 0], // top row: both red
+        [255, 0, 0], [0, 0, 255], // bot row: red, blue
+      ]),
+    );
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain('█');
+    expect(text).toContain('▀');
+    expect(text).toContain('\x1b[48;2;0;0;255m'); // bg blue for the split cell
+  });
 });

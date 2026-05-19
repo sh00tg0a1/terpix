@@ -2,6 +2,10 @@ import { Command } from 'commander';
 import { play } from './commands/play.js';
 import { demo } from './commands/demo.js';
 import { renderPlan } from './commands/render-plan.js';
+import { registerBuiltins } from '../core/assets/builtin/index.js';
+import { listAssets } from '../core/assets/registry.js';
+
+registerBuiltins();
 
 const program = new Command();
 
@@ -48,6 +52,21 @@ program
   .action(async () => {
     const { probeCaps } = await import('../adapters/terminal/driver.js');
     console.log(JSON.stringify(probeCaps(), null, 2));
+  });
+
+program
+  .command('asset')
+  .description('Inspect registered assets')
+  .argument('<subcommand>', 'list')
+  .action((subcommand: string) => {
+    if (subcommand !== 'list') {
+      console.error(`terpix asset: unknown subcommand '${subcommand}'. Try 'list'.`);
+      process.exit(1);
+    }
+    const rows = listAssets();
+    for (const entry of rows) {
+      console.log(`${entry.name.padEnd(14)} [${entry.source}]  ${entry.description}`);
+    }
   });
 
 program.parseAsync().catch((err: unknown) => {

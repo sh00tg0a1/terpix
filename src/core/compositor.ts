@@ -1,6 +1,6 @@
 import { createBuffer, type PixelBuffer } from './pixel.js';
 import { paintBackground } from './backgrounds.js';
-import { SPRITE_DRAWERS, type SpriteName } from './assets/sprites.js';
+import { findNearestName, getAsset } from './assets/registry.js';
 import { ease, hexToRgb, lerp, mulberry32, type Ease } from './math.js';
 import type { KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
 import type { RGBFrame } from './types.js';
@@ -78,8 +78,16 @@ function drawSpriteLayer(buf: PixelBuffer, layer: Extract<LayerT, { type: 'sprit
   const cy = state.y * buf.h;
   const size = state.scale * Math.min(buf.w, buf.h) * 0.2;
   const color = hexToRgb(layer.color ?? '#cccccc');
-  const drawer = SPRITE_DRAWERS[layer.asset as SpriteName];
-  drawer({ buf, cx, cy, size, color, rotation: state.rotation, opacity: state.opacity });
+  const entry = getAsset(layer.asset);
+  if (!entry) {
+    const hint = findNearestName(layer.asset);
+    throw new Error(
+      `unknown sprite asset '${layer.asset}'` +
+        (hint ? ` (did you mean '${hint}'?)` : '') +
+        '. Run `terpix asset list` to see registered names.',
+    );
+  }
+  entry.draw({ buf, cx, cy, size, color, rotation: state.rotation, opacity: state.opacity });
 }
 
 const SIZE_PX: Record<'sm' | 'md' | 'lg', number> = { sm: 4, md: 7, lg: 12 };

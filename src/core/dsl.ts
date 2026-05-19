@@ -37,7 +37,7 @@ export const Background = z.discriminatedUnion('type', [
   }),
 ]);
 
-export const SpriteAsset = z.enum(['spaceship', 'planet', 'moon', 'star', 'mountain', 'tree']);
+export const SpriteAsset = z.string().min(1);
 
 export const Layer = z.discriminatedUnion('type', [
   z.object({

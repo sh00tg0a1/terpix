@@ -6,6 +6,12 @@ const CURSOR_HIDE = '\x1b[?25l';
 const CURSOR_SHOW = '\x1b[?25h';
 const RESET_COLORS = '\x1b[0m';
 const CLEAR = '\x1b[2J\x1b[H';
+// DEC mode 2026 — Synchronized Output. The terminal buffers everything
+// between BEGIN/END and presents the result atomically, eliminating mid-frame
+// tearing/flicker. Supported by iTerm2 ≥3.5, kitty, WezTerm, Alacritty ≥0.13,
+// Tabby ≥1.0.184. Terminals that don't know the sequence simply ignore it.
+const SYNC_BEGIN = new TextEncoder().encode('\x1b[?2026h');
+const SYNC_END = new TextEncoder().encode('\x1b[?2026l');
 
 export interface TerminalCaps {
   truecolor: boolean;
@@ -52,7 +58,9 @@ export class TerminalDriver {
   async writeFrame(bytes: Uint8Array): Promise<void> {
     const corkable = this.out as unknown as { cork?: () => void; uncork?: () => void };
     if (typeof corkable.cork === 'function') corkable.cork();
+    this.out.write(SYNC_BEGIN);
     const ok = this.out.write(bytes);
+    this.out.write(SYNC_END);
     if (typeof corkable.uncork === 'function') corkable.uncork();
     if (!ok) {
       await new Promise<void>((resolve) => this.out.once('drain', resolve));

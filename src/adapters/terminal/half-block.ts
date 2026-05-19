@@ -2,47 +2,70 @@ import type { Encoder } from '../../core/encoder.js';
 import type { CellRatio, RGBFrame } from '../../core/types.js';
 
 const ESC = 0x1b;
-// ▀ = U+2580 UPPER HALF BLOCK — used for cells with top ≠ bottom color.
-// For solid cells (top == bottom) we emit a SPACE with bg=fg. Space carries no
-// glyph at all, so the terminal paints the entire cell with the ANSI bg color —
-// no font line-height / glyph-padding gap can introduce scanlines. The previous
-// approach (█ FULL BLOCK) still showed a faint gap on iTerm2 because its glyph
-// has small vertical padding inside the cell that the bg paint did not cover.
-const HALF_BLOCK_BYTES = new TextEncoder().encode('▀');
-const SOLID_BYTES = new Uint8Array([0x20]); // ASCII space
-const NEWLINE = new TextEncoder().encode('\r\n');
-const RESET = new TextEncoder().encode('\x1b[0m');
-const CURSOR_HOME = new TextEncoder().encode('\x1b[H');
+const LBR = 0x5b; // '['
+const SEMI = 0x3b; // ';'
+const M = 0x6d; // 'm'
+// ▀ U+2580 → UTF-8 0xE2 0x96 0x80 (used for cells with top ≠ bottom).
+const HB0 = 0xe2;
+const HB1 = 0x96;
+const HB2 = 0x80;
+const SP = 0x20; // SPACE — for solid (top == bot) cells.
+const CR = 0x0d;
+const LF = 0x0a;
+const H = 0x48; // 'H' for cursor home
 
-function pushDigits(buf: number[], n: number): void {
-  if (n >= 100) buf.push(0x30 + Math.floor(n / 100));
-  if (n >= 10) buf.push(0x30 + (Math.floor(n / 10) % 10));
-  buf.push(0x30 + (n % 10));
+function writeDigits(out: Uint8Array, off: number, n: number): number {
+  if (n >= 100) {
+    out[off++] = 0x30 + Math.floor(n / 100);
+    out[off++] = 0x30 + (Math.floor(n / 10) % 10);
+    out[off++] = 0x30 + (n % 10);
+  } else if (n >= 10) {
+    out[off++] = 0x30 + Math.floor(n / 10);
+    out[off++] = 0x30 + (n % 10);
+  } else {
+    out[off++] = 0x30 + n;
+  }
+  return off;
 }
 
-function writeAnsiColor(buf: number[], prefix: number, r: number, g: number, b: number): void {
-  buf.push(ESC, 0x5b);
-  pushDigits(buf, prefix);
-  buf.push(0x3b, 0x32, 0x3b);
-  pushDigits(buf, r);
-  buf.push(0x3b);
-  pushDigits(buf, g);
-  buf.push(0x3b);
-  pushDigits(buf, b);
-  buf.push(0x6d);
+function writeAnsiColor(
+  out: Uint8Array,
+  off: number,
+  prefix: number,
+  r: number,
+  g: number,
+  b: number,
+): number {
+  out[off++] = ESC;
+  out[off++] = LBR;
+  off = writeDigits(out, off, prefix);
+  out[off++] = SEMI;
+  out[off++] = 0x32; // '2'
+  out[off++] = SEMI;
+  off = writeDigits(out, off, r);
+  out[off++] = SEMI;
+  off = writeDigits(out, off, g);
+  out[off++] = SEMI;
+  off = writeDigits(out, off, b);
+  out[off++] = M;
+  return off;
 }
 
-// Cursor forward N columns: ESC[<N>C
-function writeCursorForward(buf: number[], n: number): void {
-  if (n <= 0) return;
-  buf.push(ESC, 0x5b);
-  pushDigits(buf, n);
-  buf.push(0x43);
+function writeCursorForward(out: Uint8Array, off: number, n: number): number {
+  if (n <= 0) return off;
+  out[off++] = ESC;
+  out[off++] = LBR;
+  off = writeDigits(out, off, n);
+  out[off++] = 0x43; // 'C'
+  return off;
 }
 
 export class HalfBlockEncoder implements Encoder {
   readonly name = 'half' as const;
   readonly cellRatio: CellRatio = { w: 1, h: 2 };
+  // Re-used scratch buffer; grows as needed. Allocating once avoids 50k+
+  // Array.push calls per frame.
+  private scratch = new Uint8Array(0);
 
   encode(frame: RGBFrame, prev?: RGBFrame): Uint8Array {
     const { w, h, rgba } = frame;
@@ -55,18 +78,30 @@ export class HalfBlockEncoder implements Encoder {
     const sameShape = !!prev && prev.w === w && prev.h === h && prev.rgba.length === rgba.length;
     const p = sameShape && prev ? prev.rgba : undefined;
 
-    const out: number[] = [];
-    out.push(...CURSOR_HOME);
+    // Worst-case bytes per cell: ESC[38;2;R;G;Bm (≤20) + ESC[48;2;R;G;Bm (≤20)
+    // + 3 bytes ▀ = 43. Plus per-row ESC[0m + CRLF + occasional ESC[<N>C.
+    // Reserve generously; cheaper than reallocating mid-frame.
+    const cells = (w * h) / 2;
+    const need = cells * 48 + h * 8 + 16;
+    if (this.scratch.length < need) this.scratch = new Uint8Array(need);
+    const out = this.scratch;
+    let off = 0;
+
+    // ESC [ H — cursor home
+    out[off++] = ESC;
+    out[off++] = LBR;
+    out[off++] = H;
 
     for (let y = 0; y < h; y += 2) {
-      // Per-row state. Initial "unknown" colors force first emission of fg/bg.
       let curFgR = -1, curFgG = -1, curFgB = -1;
       let curBgR = -1, curBgG = -1, curBgB = -1;
       let skipCount = 0;
+      const yw = y * w;
+      const ywNext = (y + 1) * w;
 
       for (let x = 0; x < w; x++) {
-        const topIdx = (y * w + x) * 4;
-        const botIdx = ((y + 1) * w + x) * 4;
+        const topIdx = (yw + x) * 4;
+        const botIdx = (ywNext + x) * 4;
         const tR = rgba[topIdx]!;
         const tG = rgba[topIdx + 1]!;
         const tB = rgba[topIdx + 2]!;
@@ -74,17 +109,16 @@ export class HalfBlockEncoder implements Encoder {
         const bG = rgba[botIdx + 1]!;
         const bB = rgba[botIdx + 2]!;
 
-        // Frame diff: skip cells unchanged from previous frame.
-        if (p) {
-          const ptR = p[topIdx]!;
-          const ptG = p[topIdx + 1]!;
-          const ptB = p[topIdx + 2]!;
-          const pbR = p[botIdx]!;
-          const pbG = p[botIdx + 1]!;
-          const pbB = p[botIdx + 2]!;
-          if (tR === ptR && tG === ptG && tB === ptB && bR === pbR && bG === pbG && bB === pbB) {
+        if (p !== undefined) {
+          if (
+            tR === p[topIdx] &&
+            tG === p[topIdx + 1] &&
+            tB === p[topIdx + 2] &&
+            bR === p[botIdx] &&
+            bG === p[botIdx + 1] &&
+            bB === p[botIdx + 2]
+          ) {
             skipCount++;
-            // Skipping invalidates the running fg/bg state because we did not emit.
             curFgR = -1;
             curBgR = -1;
             continue;
@@ -92,33 +126,41 @@ export class HalfBlockEncoder implements Encoder {
         }
 
         if (skipCount > 0) {
-          writeCursorForward(out, skipCount);
+          off = writeCursorForward(out, off, skipCount);
           skipCount = 0;
         }
 
-        // Always emit fg AND bg explicitly. For solid cells (top == bot) we
-        // also set bg to the same color so the terminal's default background
-        // cannot leak through font line-height gaps as a scanline. Use █ for
-        // solid and ▀ for split cells.
         const solid = tR === bR && tG === bG && tB === bB;
         const wantBgR = solid ? tR : bR;
         const wantBgG = solid ? tG : bG;
         const wantBgB = solid ? tB : bB;
         if (tR !== curFgR || tG !== curFgG || tB !== curFgB) {
-          writeAnsiColor(out, 38, tR, tG, tB);
+          off = writeAnsiColor(out, off, 38, tR, tG, tB);
           curFgR = tR; curFgG = tG; curFgB = tB;
         }
         if (wantBgR !== curBgR || wantBgG !== curBgG || wantBgB !== curBgB) {
-          writeAnsiColor(out, 48, wantBgR, wantBgG, wantBgB);
+          off = writeAnsiColor(out, off, 48, wantBgR, wantBgG, wantBgB);
           curBgR = wantBgR; curBgG = wantBgG; curBgB = wantBgB;
         }
-        out.push(...(solid ? SOLID_BYTES : HALF_BLOCK_BYTES));
+        if (solid) {
+          out[off++] = SP;
+        } else {
+          out[off++] = HB0;
+          out[off++] = HB1;
+          out[off++] = HB2;
+        }
       }
-      // End-of-row: only reset if we drew anything to leave a clean state.
-      out.push(...RESET);
-      if (y + 2 < h) out.push(...NEWLINE);
+      // ESC [ 0 m
+      out[off++] = ESC;
+      out[off++] = LBR;
+      out[off++] = 0x30;
+      out[off++] = M;
+      if (y + 2 < h) {
+        out[off++] = CR;
+        out[off++] = LF;
+      }
     }
 
-    return new Uint8Array(out);
+    return out.subarray(0, off);
   }
 }

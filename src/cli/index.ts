@@ -2,10 +2,17 @@ import { Command } from 'commander';
 import { play } from './commands/play.js';
 import { demo } from './commands/demo.js';
 import { renderPlan } from './commands/render-plan.js';
+import { validatePlan } from './commands/validate-plan.js';
 import { registerBuiltins } from '../core/assets/builtin/index.js';
 import { listAssets } from '../core/assets/registry.js';
+import { loadUserAssets } from '../core/assets/loader.js';
 
 registerBuiltins();
+const loadReport = loadUserAssets();
+for (const err of loadReport.errors) {
+  console.error(`[terpix] failed to load asset '${err.path}':`);
+  for (const m of err.messages) console.error('  - ' + m);
+}
 
 const program = new Command();
 
@@ -44,6 +51,14 @@ program
   .argument('<path>', 'path to a JSON plan file')
   .action(async (path: string) => {
     await renderPlan({ path });
+  });
+
+program
+  .command('validate-plan')
+  .description('Parse + type-check a scene plan and verify all sprite assets exist')
+  .argument('<path>', 'path to a JSON plan file')
+  .action(async (path: string) => {
+    await validatePlan({ path });
   });
 
 program

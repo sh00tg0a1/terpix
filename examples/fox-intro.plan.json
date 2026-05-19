@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "title": "Pixel Fox intro (21st-Century-Fox homage)",
+  "fps": 24,
+  "shots": [
+    {
+      "id": "searchlights",
+      "durationMs": 2500,
+      "background": {
+        "type": "gradient",
+        "from": "#000000",
+        "to": "#0a1a3a",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 80,
+          "origin": { "x": 0.15, "y": 1.0 },
+          "seed": 7
+        },
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 80,
+          "origin": { "x": 0.85, "y": 1.0 },
+          "seed": 19
+        },
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 40,
+          "origin": { "x": 0.5, "y": 1.0 },
+          "seed": 3
+        },
+        {
+          "type": "text",
+          "content": "A TERPIX PRODUCTION",
+          "style": "fade-in",
+          "color": "#ddc070",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.5 }
+        }
+      ]
+    },
+    {
+      "id": "logo-reveal",
+      "durationMs": 4000,
+      "background": {
+        "type": "gradient",
+        "from": "#020814",
+        "to": "#143a78",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 120,
+          "origin": { "x": 0.5, "y": 0.95 },
+          "seed": 11
+        },
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 60,
+          "origin": { "x": 0.2, "y": 0.9 },
+          "seed": 23
+        },
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 60,
+          "origin": { "x": 0.8, "y": 0.9 },
+          "seed": 29
+        },
+        {
+          "type": "text",
+          "content": "20TH",
+          "style": "fade-in",
+          "color": "#f4c542",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.18 }
+        },
+        {
+          "type": "text",
+          "content": "PIXEL",
+          "style": "fade-in",
+          "color": "#ffd35a",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.40 }
+        },
+        {
+          "type": "text",
+          "content": "FOX",
+          "style": "fade-in",
+          "color": "#f4c542",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.62 }
+        },
+        {
+          "type": "sprite",
+          "asset": "star",
+          "color": "#ffe28a",
+          "ease": "easeOut",
+          "keyframes": [
+            { "tMs": 0,    "x": 0.5, "y": 0.85, "scale": 0.6, "opacity": 0 },
+            { "tMs": 1500, "x": 0.5, "y": 0.85, "scale": 1.1, "opacity": 1 },
+            { "tMs": 4000, "x": 0.5, "y": 0.85, "scale": 1.4, "opacity": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hold",
+      "durationMs": 2000,
+      "background": {
+        "type": "gradient",
+        "from": "#020814",
+        "to": "#143a78",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "text",
+          "content": "20TH",
+          "style": "static",
+          "color": "#f4c542",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.18 }
+        },
+        {
+          "type": "text",
+          "content": "PIXEL",
+          "style": "static",
+          "color": "#ffd35a",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.40 }
+        },
+        {
+          "type": "text",
+          "content": "FOX",
+          "style": "static",
+          "color": "#f4c542",
+          "size": "lg",
+          "position": { "x": 0.5, "y": 0.62 }
+        },
+        {
+          "type": "sprite",
+          "asset": "star",
+          "color": "#ffe28a",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0,    "x": 0.5, "y": 0.85, "scale": 1.4, "opacity": 1 },
+            { "tMs": 2000, "x": 0.5, "y": 0.85, "scale": 1.5, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "particles",
+          "kind": "sparks",
+          "count": 30,
+          "origin": { "x": 0.5, "y": 0.85 },
+          "seed": 41
+        }
+      ]
+    }
+  ]
+}

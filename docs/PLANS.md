@@ -37,10 +37,13 @@ defining experience of terpix and must be exercised by every path.
 - Plan output cached on disk.
 - See [design-docs/llm-integration.md](design-docs/llm-integration.md).
 
-### 3.5 — User assets (shape-json)
-- Loader for `~/.config/terpix/assets/*.json` declarative shapes.
-- `terpix asset list / preview / add / remove` CLI.
-- LLM registry auto-extends.
+### 3.5 — User assets (shape-json) ✅
+- Loader scans `./terpix-assets/`, `$TERPIX_ASSET_DIRS`, `~/.config/terpix/assets/`.
+- 6 primitive kinds: rect, circle, ellipse, triangle, line, polygon.
+- `@main` color placeholder resolves to per-layer color at draw time.
+- Per-file zod validation; bad files reported, others still load.
+- LLM registry auto-extends (Phase 3.2 picks them up via asset-catalog).
+- `terpix asset list` shows source (`builtin` / `shape`); `add / remove / preview` still planned.
 
 ## Phase 4 — User assets continued + encoder modes
 

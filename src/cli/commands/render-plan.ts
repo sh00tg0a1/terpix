@@ -1,6 +1,5 @@
-import { readFile } from 'node:fs/promises';
 import { composite } from '../../core/compositor.js';
-import { ScenePlan } from '../../core/dsl.js';
+import { loadPlanFromFile } from '../../core/plan-loader.js';
 import { HalfBlockEncoder } from '../../adapters/terminal/half-block.js';
 import { TerminalDriver, probeCaps } from '../../adapters/terminal/driver.js';
 
@@ -14,15 +13,13 @@ export async function renderPlan(opts: RenderPlanOpts): Promise<void> {
     process.exit(2);
   }
 
-  const raw = await readFile(opts.path, 'utf8');
-  const json: unknown = JSON.parse(raw);
-  const parsed = ScenePlan.safeParse(json);
-  if (!parsed.success) {
+  const result = await loadPlanFromFile(opts.path);
+  if (!result.ok) {
     console.error('terpix render-plan: invalid plan:');
-    console.error(parsed.error.format());
+    for (const e of result.errors) console.error('  - ' + e);
     process.exit(1);
   }
-  const plan = parsed.data;
+  const plan = result.plan;
 
   const caps = probeCaps();
   const encoder = new HalfBlockEncoder();

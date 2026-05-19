@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "title": "Cat on a moonlit roof",
+  "fps": 24,
+  "shots": [
+    {
+      "id": "moonrise",
+      "durationMs": 6000,
+      "background": {
+        "type": "gradient",
+        "from": "#02061a",
+        "to": "#1a2456",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "sprite",
+          "asset": "moon",
+          "color": "#fff2c0",
+          "ease": "easeOut",
+          "keyframes": [
+            { "tMs": 0,    "x": 0.78, "y": 0.95, "scale": 1.8, "opacity": 1 },
+            { "tMs": 6000, "x": 0.78, "y": 0.30, "scale": 2.0, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "mountain",
+          "color": "#0d1226",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.5, "y": 0.85, "scale": 2.5, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "cat",
+          "color": "#ee9933",
+          "ease": "easeInOut",
+          "keyframes": [
+            { "tMs": 0,    "x": 0.2, "y": 0.7, "scale": 1.2, "opacity": 1 },
+            { "tMs": 3000, "x": 0.5, "y": 0.65, "scale": 1.2, "opacity": 1 },
+            { "tMs": 6000, "x": 0.5, "y": 0.65, "scale": 1.2, "opacity": 1 }
+          ]
+        },
+        {
+          "type": "text",
+          "content": "MEOW",
+          "style": "typewriter",
+          "color": "#ffd35a",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.15 }
+        }
+      ]
+    }
+  ]
+}

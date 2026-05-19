@@ -4,8 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { ScenePlan } from '../src/core/dsl.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
 import { assetNames } from '../src/core/assets/registry.js';
+import { loadUserAssets } from '../src/core/assets/loader.js';
 
-const examples = ['spaceship-nebula.plan.json', 'superman-flying.plan.json'];
+const examples = [
+  'spaceship-nebula.plan.json',
+  'superman-flying.plan.json',
+  'fox-intro.plan.json',
+  'cat-on-roof.plan.json',
+];
 
 describe('example plans', () => {
   for (const file of examples) {
@@ -19,6 +25,7 @@ describe('example plans', () => {
 
   it('all sprite assets referenced in examples exist in registry', () => {
     registerBuiltins();
+    loadUserAssets({ extraDirs: [join(__dirname, '..', 'examples', 'assets')] });
     const known = new Set(assetNames());
     for (const file of examples) {
       const raw = readFileSync(join(__dirname, '..', 'examples', file), 'utf8');

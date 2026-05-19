@@ -1,10 +1,13 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { composite } from '../src/core/compositor.js';
 import { ScenePlan, type ScenePlanT } from '../src/core/dsl.js';
 import { clearRegistry } from '../src/core/assets/registry.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
 
-function plan(p: Partial<ScenePlanT>): ScenePlanT {
+type PlanInput = z.input<typeof ScenePlan>;
+
+function plan(p: Partial<PlanInput>): ScenePlanT {
   return ScenePlan.parse({
     version: 1,
     fps: 10,

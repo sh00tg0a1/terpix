@@ -18,10 +18,17 @@ terpix --allow-plugins play ...   # enable .ts plugin assets for this run
 ## Locations (search order)
 
 1. `./terpix-assets/` (per-project; checked into git for shared assets)
-2. `$XDG_CONFIG_HOME/terpix/assets/` or `~/.config/terpix/assets/` (per-user)
-3. Built-in (compiled into the binary)
+2. Each colon-separated path in `TERPIX_ASSET_DIRS` (ad-hoc, scriptable)
+3. `$XDG_CONFIG_HOME/terpix/assets/` or `~/.config/terpix/assets/` (per-user)
+4. Built-in (compiled into the binary)
 
 User-defined names override built-ins; CLI logs a warning.
+
+Example:
+
+```bash
+TERPIX_ASSET_DIRS=examples/assets terpix render-plan examples/cat-on-roof.plan.json
+```
 
 ## Supported formats
 

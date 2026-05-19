@@ -31,10 +31,17 @@ AssetEntry {
 ## Asset directories (search order)
 
 1. Project: `./terpix-assets/`
-2. User config: `$XDG_CONFIG_HOME/terpix/assets/` or `~/.config/terpix/assets/`
-3. Built-in: `src/core/assets/builtin/` (compiled into the binary)
+2. Env: each colon-separated path in `TERPIX_ASSET_DIRS`
+3. User config: `$XDG_CONFIG_HOME/terpix/assets/` or `~/.config/terpix/assets/`
+4. Built-in: `src/core/assets/builtin/` (compiled into the binary)
 
 User assets override built-ins by name; warning logged.
+
+Example: load extra assets without touching install paths:
+
+```bash
+TERPIX_ASSET_DIRS=./my-assets:./vendor/assets terpix render-plan plan.json
+```
 
 ## Schema interaction
 
@@ -117,12 +124,12 @@ terpix asset remove <name>
 
 | Phase | Capability | Status |
 |---|---|---|
-| 3.0 | Hard-coded `SPRITE_DRAWERS` (current) | shipped |
-| 3.1 | Refactor to `ASSET_REGISTRY` + loader skeleton; built-in only | planned next |
-| 3.5 | shape-json loader | planned |
+| 3.0 | Hard-coded `SPRITE_DRAWERS` | shipped |
+| 3.1 | `ASSET_REGISTRY` + builtin loader; per-asset file under `builtin/` | shipped |
+| 3.5 | shape-json loader (rect / circle / ellipse / triangle / line / polygon) | shipped |
 | 4 | bitmap-png loader (`pngjs`) | planned |
-| 5 | plugin-ts loader (gated) | planned |
-| 6 | `terpix asset *` CLI | planned |
+| 5 | plugin-ts loader (gated by `--allow-plugins`) | planned |
+| 6 | `terpix asset add/remove/preview` CLI (currently only `list`) | planned |
 | 7 | Asset packs distributable via npm | future |
 
 ## Anti-patterns

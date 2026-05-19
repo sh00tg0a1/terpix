@@ -90,7 +90,15 @@ function drawSpriteLayer(buf: PixelBuffer, layer: Extract<LayerT, { type: 'sprit
   entry.draw({ buf, cx, cy, size, color, rotation: state.rotation, opacity: state.opacity });
 }
 
-const SIZE_PX: Record<'sm' | 'md' | 'lg', number> = { sm: 4, md: 7, lg: 12 };
+// Target char-cell height as fraction of buffer height (glyph = 7 rows tall).
+const SIZE_FRAC: Record<'sm' | 'md' | 'lg', number> = { sm: 0.10, md: 0.20, lg: 0.32 };
+
+function textPx(buf: PixelBuffer, size: 'sm' | 'md' | 'lg', textLen: number): number {
+  const byHeight = Math.max(1, Math.ceil((buf.h * SIZE_FRAC[size]) / 7));
+  // 6 buffer-pixels per char (5 glyph + 1 spacing). Keep total under 92% of width.
+  const maxByWidth = textLen > 0 ? Math.max(1, Math.floor((buf.w * 0.92) / (textLen * 6))) : byHeight;
+  return Math.min(byHeight, maxByWidth);
+}
 
 function drawTextLayer(
   buf: PixelBuffer,
@@ -98,7 +106,10 @@ function drawTextLayer(
   tMs: number,
   shotDurationMs: number,
 ): void {
-  const px = SIZE_PX[layer.size];
+  const longestLine = layer.content
+    .split('\n')
+    .reduce((m, l) => Math.max(m, l.length), 0);
+  const px = textPx(buf, layer.size, longestLine);
   const color = hexToRgb(layer.color);
   const t = tMs / Math.max(1, shotDurationMs);
   let visibleChars = layer.content.length;

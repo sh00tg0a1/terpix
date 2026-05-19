@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "title": "Blinkenlights-style ASCII intro",
+  "fps": 12,
+  "renderer": "ascii",
+  "shots": [
+    {
+      "id": "scan",
+      "durationMs": 2000,
+      "background": {
+        "type": "starfield",
+        "density": 0.01,
+        "seed": 7
+      },
+      "layers": [
+        {
+          "type": "text",
+          "content": "DID YOU HEAR THAT?",
+          "style": "typewriter",
+          "color": "#ddddff",
+          "size": "md",
+          "position": { "x": 0.6, "y": 0.3 }
+        },
+        {
+          "type": "sprite",
+          "asset": "droid",
+          "color": "#cccccc",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.3, "y": 0.6, "scale": 1.0 },
+            { "tMs": 2000, "x": 0.3, "y": 0.6, "scale": 1.0 }
+          ]
+        },
+        {
+          "type": "sprite",
+          "asset": "human",
+          "color": "#ffffff",
+          "ease": "linear",
+          "keyframes": [
+            { "tMs": 0, "x": 0.5, "y": 0.6, "scale": 1.0 },
+            { "tMs": 2000, "x": 0.5, "y": 0.6, "scale": 1.0 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "logo",
+      "durationMs": 3000,
+      "background": {
+        "type": "solid",
+        "color": "#000000"
+      },
+      "layers": [
+        {
+          "type": "text",
+          "content": "TERPIX TELNET",
+          "style": "fade-in",
+          "color": "#88ff88",
+          "size": "md",
+          "position": { "x": 0.5, "y": 0.45 }
+        },
+        {
+          "type": "text",
+          "content": "press any key",
+          "style": "fade-in",
+          "color": "#888888",
+          "size": "sm",
+          "position": { "x": 0.5, "y": 0.55 }
+        },
+        {
+          "type": "sprite",
+          "asset": "star",
+          "color": "#ffffff",
+          "ease": "easeOut",
+          "keyframes": [
+            { "tMs": 0, "x": 0.5, "y": 0.7, "scale": 0.8, "opacity": 0 },
+            { "tMs": 3000, "x": 0.5, "y": 0.7, "scale": 1.2, "opacity": 1 }
+          ]
+        }
+      ]
+    }
+  ]
+}

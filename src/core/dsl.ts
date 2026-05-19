@@ -79,6 +79,8 @@ export const StylePresetName = z.enum([
   'noir',
 ]);
 
+export const Renderer = z.enum(['half', 'ascii']).default('half');
+
 export const ScenePlan = z.object({
   version: z.literal(1),
   title: z.string().default(''),
@@ -87,6 +89,7 @@ export const ScenePlan = z.object({
     .object({ w: z.number().int().positive(), h: z.number().int().positive() })
     .optional(),
   style: StylePresetName.optional(),
+  renderer: Renderer,
   shots: z.array(Shot).min(1),
 });
 

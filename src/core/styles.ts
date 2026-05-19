@@ -29,14 +29,14 @@ const PRESETS: Record<StylePresetT, StyleConfig> = {
   starwars: {
     palette: 'duotone',
     paletteColors: ['#000000', '#ffd633'],
-    edgeOnly: true,
+    edgeOnly: false,
     forceBackground: '#000000',
     edgeThreshold: 25,
   },
   minimalist: {
     palette: 'duotone',
     paletteColors: ['#f6f3ec', '#1f2933'],
-    edgeOnly: true,
+    edgeOnly: false,
     forceBackground: '#f6f3ec',
     edgeThreshold: 18,
   },

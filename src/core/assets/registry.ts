@@ -1,4 +1,5 @@
 import type { PixelBuffer } from '../pixel.js';
+import type { CharBuffer } from '../char-grid.js';
 
 export interface DrawCtx {
   buf: PixelBuffer;
@@ -10,6 +11,15 @@ export interface DrawCtx {
   opacity?: number;
 }
 
+export interface AsciiDrawCtx {
+  buf: CharBuffer;
+  cx: number; // center col
+  cy: number; // center row
+  size: number; // target sprite height in rows (width derived per asset)
+  color: [number, number, number];
+  opacity?: number;
+}
+
 export type AssetSource = 'builtin' | 'shape' | 'bitmap' | 'plugin';
 
 export interface AssetEntry {
@@ -18,6 +28,7 @@ export interface AssetEntry {
   source: AssetSource;
   origin?: string;
   draw(ctx: DrawCtx): void;
+  drawAscii?(ctx: AsciiDrawCtx): void;
 }
 
 const REGISTRY = new Map<string, AssetEntry>();

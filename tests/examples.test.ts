@@ -14,6 +14,7 @@ const examples = [
   'zen-stones.plan.json',
   'starwars-opening.plan.json',
   'starwars-crawl.plan.json',
+  'blinkenlights-ascii.plan.json',
 ];
 
 describe('example plans', () => {

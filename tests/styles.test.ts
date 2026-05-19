@@ -11,18 +11,18 @@ describe('styles', () => {
       expect(cfg.edgeOnly).toBe(false);
     });
 
-    it('starwars uses duotone + black bg + edge-only', () => {
+    it('starwars uses duotone + black bg (solid letters, not edge-only)', () => {
       const cfg = resolveStyle('starwars');
       expect(cfg.palette).toBe('duotone');
-      expect(cfg.edgeOnly).toBe(true);
+      expect(cfg.edgeOnly).toBe(false);
       expect(cfg.forceBackground).toBe('#000000');
       expect(cfg.paletteColors).toEqual(['#000000', '#ffd633']);
     });
 
-    it('minimalist uses light bg with dark stroke', () => {
+    it('minimalist uses light bg with dark stroke (solid duotone)', () => {
       const cfg = resolveStyle('minimalist');
       expect(cfg.palette).toBe('duotone');
-      expect(cfg.edgeOnly).toBe(true);
+      expect(cfg.edgeOnly).toBe(false);
       expect(cfg.forceBackground).toBe('#f6f3ec');
     });
   });

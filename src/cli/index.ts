@@ -50,8 +50,13 @@ program
   .description('Render a JSON scene plan to the terminal (DSL → compositor → encoder)')
   .argument('<path>', 'path to a JSON plan file')
   .option('--style <name>', 'override plan style: default|starwars|minimalist|silhouette|noir')
-  .action(async (path: string, opts: { style?: string }) => {
-    await renderPlan({ path, ...(opts.style ? { style: opts.style } : {}) });
+  .option('--renderer <name>', 'override plan renderer: half|ascii')
+  .action(async (path: string, opts: { style?: string; renderer?: string }) => {
+    await renderPlan({
+      path,
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.renderer ? { renderer: opts.renderer } : {}),
+    });
   });
 
 program

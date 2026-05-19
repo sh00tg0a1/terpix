@@ -6,6 +6,7 @@ import { drawStar } from './star.js';
 import { drawMountain } from './mountain.js';
 import { drawTree } from './tree.js';
 import { drawSuperman } from './superman.js';
+import { drawStarAscii, drawDroidAscii, drawHumanAscii } from './ascii-art.js';
 
 export function registerBuiltins(): void {
   if (getAsset('spaceship')?.source === 'builtin') return;
@@ -32,6 +33,25 @@ export function registerBuiltins(): void {
     description: 'a compact bright dot with a radiating cross (large foreground star)',
     source: 'builtin',
     draw: drawStar,
+    drawAscii: drawStarAscii,
+  });
+  registerAsset({
+    name: 'droid',
+    description: 'a small ASCII droid character (R2-D2-ish), only available in ascii renderer',
+    source: 'builtin',
+    draw: () => {
+      throw new Error("asset 'droid' is ascii-only; render with --renderer ascii");
+    },
+    drawAscii: drawDroidAscii,
+  });
+  registerAsset({
+    name: 'human',
+    description: 'a small ASCII humanoid figure, only available in ascii renderer',
+    source: 'builtin',
+    draw: () => {
+      throw new Error("asset 'human' is ascii-only; render with --renderer ascii");
+    },
+    drawAscii: drawHumanAscii,
   });
   registerAsset({
     name: 'mountain',

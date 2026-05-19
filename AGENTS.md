@@ -36,6 +36,9 @@ Natural-language-driven terminal character-stream movie renderer. Take a prompt 
 | Architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Design philosophy | [docs/DESIGN.md](docs/DESIGN.md) |
 | Video vocabulary | [docs/design-docs/video-vocabulary.md](docs/design-docs/video-vocabulary.md) |
+| Procedural compositor | [docs/design-docs/procedural-compositor.md](docs/design-docs/procedural-compositor.md) |
+| Asset system | [docs/design-docs/asset-system.md](docs/design-docs/asset-system.md) |
+| LLM integration | [docs/design-docs/llm-integration.md](docs/design-docs/llm-integration.md) |
 | Roadmap | [docs/PLANS.md](docs/PLANS.md) |
 | Product sense | [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md) |
 | Quality scorecard | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md) |

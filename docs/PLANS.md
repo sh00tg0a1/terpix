@@ -15,23 +15,61 @@ defining experience of terpix and must be exercised by every path.
 - terminal cap probe + SIGWINCH
 - Plan schema v0: one shot, Ken-Burns via 2 keyframes
 
-## Phase 3 — NL planner (video v1: ~15s, multi-shot)
-- LLM adapter (Anthropic SDK with prompt caching)
-- Prompt → scene plan JSON (schema v1: flat shot list, hard cuts only)
-- Per-shot motion keyframes (pan / zoom)
-- Scene → image (placeholder image-gen adapter or static slide)
+## Phase 3 — Procedural pipeline (video v1: ~15s, multi-shot, current)
 
-## Phase 4 — Encoder modes
-ascii, block, braille, half (default complete). Mode selection CLI flag.
+### 3.0 — DSL + compositor + built-in assets ✅
+- DSL (zod): ScenePlan, Shot, Layer (sprite / text / particles), Background (solid / gradient / starfield / nebula), keyframes.
+- Procedural compositor: layered RGBA buffer, alpha blend, keyframe interpolation, 5×7 bitmap font, simplex-noise nebula.
+- Built-in sprites: spaceship, planet, moon, star, mountain, tree.
+- `terpix render-plan <path>` plays a hand-written JSON plan.
+- See [design-docs/procedural-compositor.md](design-docs/procedural-compositor.md).
 
-## Phase 5 — Export
-- `terpix render … -o out.mp4` (ffmpeg encode bypass)
-- `terpix record … -o out.cast` (asciinema ANSI capture)
+### 3.1 — Asset registry refactor
+- Move `SPRITE_DRAWERS` into `ASSET_REGISTRY` with `name + description + draw + source`.
+- Relax `SpriteAsset` zod to `z.string()` + runtime registry check at compositor entry.
+- `asset-catalog.ts` derives the LLM enum and markdown from the registry.
+- No user formats yet — just the skeleton so user assets can land in 3.5 without further refactor.
+
+### 3.2 — LLM planner
+- Anthropic SDK + `tool_use` + zod-to-json-schema; `cache_control: ephemeral` on system prompt.
+- `terpix plan "<prompt>"` and `terpix play "<prompt>"` (NL inline).
+- Retry up to 3 with appended zod error.
+- Plan output cached on disk.
+- See [design-docs/llm-integration.md](design-docs/llm-integration.md).
+
+### 3.5 — User assets (shape-json)
+- Loader for `~/.config/terpix/assets/*.json` declarative shapes.
+- `terpix asset list / preview / add / remove` CLI.
+- LLM registry auto-extends.
+
+## Phase 4 — User assets continued + encoder modes
+
+### 4.1 — Encoder modes
+ascii, block, braille, half (default complete). Mode selection CLI flag. Cap auto-probe.
+
+### 4.2 — User assets (bitmap-png)
+- `pngjs` loader; sidecar JSON for anchor + transparent-color key.
+- Nearest-neighbor scaling.
+
+### 4.3 — Primitive composition layer (`shape` layer type)
+- DSL gains a `shape` layer that LLM can compose ad-hoc from triangles / circles / lines.
+- Bridges the gap between built-in sprites and image-gen — unlimited shapes, no API costs.
+
+## Phase 5 — Export + user plugin assets
+
+### 5.1 — Export
+- `terpix render … -o out.mp4` (ffmpeg encode bypass; resolution decoupled from terminal).
+- `terpix record … -o out.cast` (asciinema ANSI capture).
+
+### 5.2 — User assets (plugin-ts, gated)
+- `--allow-plugins` flag enables `*.ts` dynamic import.
+- Warning printed for each plugin loaded.
 
 ## Phase 6 — Video v2: scenes + transitions (~30s)
 - Schema v2: shots nested under scenes
 - Transitions between scenes (dissolve, fade)
 - Planner groups shots into narrative scenes
+- Asset packs distributable via npm (`terpix install <pkg>`)
 
 ## Phase 7 — Audio sync + sequences (video v3, ~1 min)
 - Audio track decode + clock-driven frame pacing

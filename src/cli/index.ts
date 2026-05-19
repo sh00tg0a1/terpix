@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { play } from './commands/play.js';
 import { demo } from './commands/demo.js';
+import { renderPlan } from './commands/render-plan.js';
 
 const program = new Command();
 
@@ -31,6 +32,14 @@ program
       process.exit(1);
     }
     await demo({ scene, fps: opts.fps, durationMs: Math.round(opts.duration * 1000) });
+  });
+
+program
+  .command('render-plan')
+  .description('Render a JSON scene plan to the terminal (DSL → compositor → encoder)')
+  .argument('<path>', 'path to a JSON plan file')
+  .action(async (path: string) => {
+    await renderPlan({ path });
   });
 
 program

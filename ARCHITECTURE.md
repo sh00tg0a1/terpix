@@ -37,14 +37,18 @@ NL prompt
 
 | Package | Allowed deps |
 |---|---|
-| `src/core/*` | Pure TS, no node `fs`/`child_process` |
-| `src/adapters/llm/*` | `core` + LLM SDK |
+| `src/core/*` | Pure TS; no node `fs`/`child_process`. Asset registry lives here (`src/core/assets/`). |
+| `src/adapters/llm/*` | `core` + Anthropic SDK; system prompt derived from `ASSET_REGISTRY`. |
 | `src/adapters/ffmpeg/*` | `core` + node child_process |
 | `src/adapters/terminal/*` | `core` + node tty |
 | `src/adapters/exporter/*` | `core` + ffmpeg adapter |
 | `src/cli/*` | All of the above |
 
 Edges flow `cli → adapters → core`. Core never imports adapters.
+
+## Asset registry
+
+`src/core/assets/registry.ts` (Phase 3.1+) owns `ASSET_REGISTRY: Map<string, AssetEntry>`. Built-in drawers register at startup; user assets load from `./terpix-assets/` or `~/.config/terpix/assets/`. Three formats: shape-json (data only), bitmap-png (requires `pngjs`), plugin-ts (gated behind `--allow-plugins`). See [docs/design-docs/asset-system.md](docs/design-docs/asset-system.md).
 
 ## Backends (frame-encoder)
 

@@ -3,9 +3,10 @@
 | Domain | Description |
 |---|---|
 | [nl-planner.md](nl-planner.md) | NL prompt → scene plan JSON |
-| [scene-renderer.md](scene-renderer.md) | Scene plan → RGB frames (ffmpeg / image-gen) |
+| [assets.md](assets.md) | Sprite library + user-extensible asset registry (shape / bitmap / plugin) |
+| [scene-renderer.md](scene-renderer.md) | Scene plan → RGB frames (procedural compositor; ffmpeg for video input) |
 | [frame-encoder.md](frame-encoder.md) | RGB frame → terminal bytes (6 backends) |
 | [terminal-driver.md](terminal-driver.md) | TTY output, cap probe, signal handling |
 | [exporter.md](exporter.md) | Render to `.mp4` / record to `.cast` |
 | [audio-sync.md](audio-sync.md) | Audio decode + frame clock |
-| [cli.md](cli.md) | Command surface: play / render / record |
+| [cli.md](cli.md) | Command surface: play / render / record / plan / asset |

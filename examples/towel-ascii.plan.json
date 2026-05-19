@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "title": "Towel.blinkenlights.nl-style scene",
+  "title": "towel.blinkenlights.nl asciimation homage",
   "fps": 12,
   "renderer": "ascii",
   "shots": [
     {
       "id": "scene",
-      "durationMs": 6000,
+      "durationMs": 8000,
       "background": {
         "type": "solid",
         "color": "#000000"
@@ -14,27 +14,27 @@
       "layers": [
         {
           "type": "text",
-          "content": " _____\n|  o  |\n| === |\n|_____|\n |_|_|",
+          "content": "Telnet towel.blinkenlights.nl",
           "style": "static",
-          "color": "#cccccc",
+          "color": "#aaaaaa",
+          "size": "sm",
+          "position": { "x": 0.18, "y": 0.04 }
+        },
+        {
+          "type": "text",
+          "content": "       <>\n      _||_\n     /====\\\n    |======|\n    | ==== |\n    |  ()  |\n    |  ()  |\n    |  **  |\n   _|      |_\n  |_| |~~| |_|\n   ~  |~~|  ~\n   _  |__|  _\n  |_| [..] |_|",
+          "style": "static",
+          "color": "#cfd6e0",
           "size": "sm",
           "position": { "x": 0.28, "y": 0.5 }
         },
         {
           "type": "text",
-          "content": "  ___\n |. .|\n \\_-_/\n /|=|\\\n  |=|\n  |=|\n /| |\\\nd_b d_b",
+          "content": "     :oo\n     |==|\n    /====\\\n   /-/  \\-\\\n   |      |\n   |  ##  |\n   |  ##  |\n   |      |\n    \\____/\n    [][]\n    |  |\n    |  |\n    [][]",
           "style": "static",
-          "color": "#dddddd",
+          "color": "#e6e6e6",
           "size": "sm",
-          "position": { "x": 0.5, "y": 0.45 }
-        },
-        {
-          "type": "text",
-          "content": "too",
-          "style": "static",
-          "color": "#888888",
-          "size": "sm",
-          "position": { "x": 0.62, "y": 0.32 }
+          "position": { "x": 0.5, "y": 0.5 }
         },
         {
           "type": "text",
@@ -42,15 +42,15 @@
           "style": "typewriter",
           "color": "#ffffff",
           "size": "sm",
-          "position": { "x": 0.78, "y": 0.45 }
+          "position": { "x": 0.76, "y": 0.27 }
         },
         {
           "type": "text",
-          "content": "Telnet towel.blinkenlights.nl",
+          "content": "________________________________________________________________________",
           "style": "static",
-          "color": "#888888",
+          "color": "#cccccc",
           "size": "sm",
-          "position": { "x": 0.5, "y": 0.05 }
+          "position": { "x": 0.5, "y": 0.86 }
         }
       ]
     }

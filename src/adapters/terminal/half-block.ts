@@ -2,12 +2,14 @@ import type { Encoder } from '../../core/encoder.js';
 import type { CellRatio, RGBFrame } from '../../core/types.js';
 
 const ESC = 0x1b;
-// ▀ = U+2580 UPPER HALF BLOCK — for cells with top ≠ bottom color (fg/bg shows split).
-// █ = U+2588 FULL BLOCK — for cells with top == bottom (paints whole cell in fg color).
-// Using █ for solid-color cells avoids the tiny inter-row gap many terminal fonts
-// render around ▀ at the top/bottom edge, which appears as a thin horizontal scanline.
+// ▀ = U+2580 UPPER HALF BLOCK — used for cells with top ≠ bottom color.
+// For solid cells (top == bottom) we emit a SPACE with bg=fg. Space carries no
+// glyph at all, so the terminal paints the entire cell with the ANSI bg color —
+// no font line-height / glyph-padding gap can introduce scanlines. The previous
+// approach (█ FULL BLOCK) still showed a faint gap on iTerm2 because its glyph
+// has small vertical padding inside the cell that the bg paint did not cover.
 const HALF_BLOCK_BYTES = new TextEncoder().encode('▀');
-const FULL_BLOCK_BYTES = new TextEncoder().encode('█');
+const SOLID_BYTES = new Uint8Array([0x20]); // ASCII space
 const NEWLINE = new TextEncoder().encode('\r\n');
 const RESET = new TextEncoder().encode('\x1b[0m');
 const CURSOR_HOME = new TextEncoder().encode('\x1b[H');
@@ -110,7 +112,7 @@ export class HalfBlockEncoder implements Encoder {
           writeAnsiColor(out, 48, wantBgR, wantBgG, wantBgB);
           curBgR = wantBgR; curBgG = wantBgG; curBgB = wantBgB;
         }
-        out.push(...(solid ? FULL_BLOCK_BYTES : HALF_BLOCK_BYTES));
+        out.push(...(solid ? SOLID_BYTES : HALF_BLOCK_BYTES));
       }
       // End-of-row: only reset if we drew anything to leave a clean state.
       out.push(...RESET);

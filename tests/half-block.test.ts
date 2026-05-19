@@ -111,7 +111,7 @@ describe('HalfBlockEncoder', () => {
     expect(text.match(/▀/g)?.length).toBe(4);
   });
 
-  it('uses FULL BLOCK (█) when top and bottom pixel are the same color', () => {
+  it('uses SPACE with bg=fg for solid cells (no glyph, gap-free fill)', () => {
     const enc = new HalfBlockEncoder();
     const bytes = enc.encode(
       frame(2, 2, [
@@ -120,18 +120,17 @@ describe('HalfBlockEncoder', () => {
       ]),
     );
     const text = new TextDecoder().decode(bytes);
-    expect(text).toContain('█');
-    // bg = fg for solid cells (prevents terminal default bg leaking through).
     expect(text).toContain('\x1b[48;2;255;0;0m');
     expect(text.match(/\x1b\[38;2;255;0;0m/g)?.length).toBe(1);
     expect(text.match(/\x1b\[48;2;255;0;0m/g)?.length).toBe(1);
-    expect(text.match(/█/g)?.length).toBe(2);
+    // No half block glyphs; spaces fill the row.
+    expect(text).not.toContain('▀');
+    // 2 cells × 1 space each
+    expect(text.match(/ /g)?.length).toBe(2);
   });
 
-  it('mixed solid + split cells use █ and ▀ respectively', () => {
+  it('mixed solid + split cells use space and ▀ respectively', () => {
     const enc = new HalfBlockEncoder();
-    // Cell 0: top=red, bot=red (solid) → █
-    // Cell 1: top=red, bot=blue (split) → ▀
     const bytes = enc.encode(
       frame(2, 2, [
         [255, 0, 0], [255, 0, 0], // top row: both red
@@ -139,7 +138,6 @@ describe('HalfBlockEncoder', () => {
       ]),
     );
     const text = new TextDecoder().decode(bytes);
-    expect(text).toContain('█');
     expect(text).toContain('▀');
     expect(text).toContain('\x1b[48;2;0;0;255m'); // bg blue for the split cell
   });

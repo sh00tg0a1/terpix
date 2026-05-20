@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { play } from './commands/play.js';
 import { demo } from './commands/demo.js';
 import { renderPlan } from './commands/render-plan.js';
+import { render as renderToFile } from './commands/render.js';
 import { validatePlan } from './commands/validate-plan.js';
 import { parseDurationMs, planCmd } from './commands/plan.js';
 import { registerBuiltins } from '../core/assets/builtin/index.js';
@@ -97,6 +98,45 @@ program
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.renderer === 'ascii' ? { renderer: 'ascii' as const } : { renderer: 'half' as const }),
       ...(opts.style ? { style: opts.style } : {}),
+    });
+  });
+
+program
+  .command('render')
+  .description('Render a plan file OR an NL prompt to an mp4 (or other ffmpeg format)')
+  .argument('<input>', 'path to a plan .json file OR a natural-language prompt')
+  .requiredOption('-o, --out <path>', 'output file (e.g. out.mp4)')
+  .option('--size <WxH>', 'output dimensions in pixels (default 1280x720)')
+  .option('--fps <n>', 'fps (override plan.fps)', (v) => parseInt(v, 10))
+  .option('--duration <t>', 'NL prompt total duration (e.g. 15s, 1m)', '15s')
+  .option('--model <id>', 'Anthropic model id (NL only)', 'claude-sonnet-4-6')
+  .option('--style <name>', 'override plan style')
+  .option('--audio <path>', 'mux an audio track into the output')
+  .option('--preset <name>', 'x264 preset (ultrafast..veryslow)', 'medium')
+  .option('--crf <n>', 'x264 crf (lower=better, 18 is visually lossless)', (v) => parseInt(v, 10))
+  .option('--save-plan <path>', 'also write the generated plan to disk (NL only)')
+  .option('--force', 'overwrite existing output')
+  .action(async (
+    input: string,
+    opts: {
+      out: string; size?: string; fps?: number; duration: string;
+      model?: string; style?: string; audio?: string;
+      preset?: string; crf?: number; savePlan?: string; force?: boolean;
+    },
+  ) => {
+    await renderToFile({
+      input,
+      out: opts.out,
+      duration: opts.duration,
+      force: !!opts.force,
+      ...(opts.size ? { size: opts.size } : {}),
+      ...(opts.fps !== undefined ? { fps: opts.fps } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.audio ? { audio: opts.audio } : {}),
+      ...(opts.preset ? { preset: opts.preset } : {}),
+      ...(opts.crf !== undefined ? { crf: opts.crf } : {}),
+      ...(opts.savePlan ? { savePlan: opts.savePlan } : {}),
     });
   });
 

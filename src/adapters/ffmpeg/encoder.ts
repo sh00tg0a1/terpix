@@ -2,8 +2,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 export interface FfmpegEncoderOpts {
   output: string;
-  width: number;
-  height: number;
+  width: number; // input (raw frame) width in pixels
+  height: number; // input (raw frame) height in pixels
+  outputWidth?: number; // optional final encoded width (after scale)
+  outputHeight?: number; // optional final encoded height (after scale)
+  upscaleFilter?: 'neighbor' | 'lanczos' | 'bicubic'; // for the scale stage
   fps: number;
   preset?: string;
   crf?: number;
@@ -11,8 +14,10 @@ export interface FfmpegEncoderOpts {
 }
 
 export function buildFfmpegArgs(opts: FfmpegEncoderOpts): string[] {
-  if (opts.width % 2 !== 0 || opts.height % 2 !== 0) {
-    throw new Error(`ffmpeg encoder: width and height must be even (got ${opts.width}x${opts.height})`);
+  const outW = opts.outputWidth ?? opts.width;
+  const outH = opts.outputHeight ?? opts.height;
+  if (outW % 2 !== 0 || outH % 2 !== 0) {
+    throw new Error(`ffmpeg encoder: output dimensions must be even (got ${outW}x${outH})`);
   }
   const args = [
     '-y',
@@ -32,6 +37,11 @@ export function buildFfmpegArgs(opts: FfmpegEncoderOpts): string[] {
   ];
   if (opts.audioPath) {
     args.push('-i', opts.audioPath);
+  }
+  const needsScale = outW !== opts.width || outH !== opts.height;
+  if (needsScale) {
+    const flags = opts.upscaleFilter ?? 'neighbor';
+    args.push('-vf', `scale=${outW}:${outH}:flags=${flags}`);
   }
   args.push(
     '-c:v',

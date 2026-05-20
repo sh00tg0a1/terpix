@@ -20,6 +20,8 @@ export interface RenderOpts {
   crf?: number;
   force?: boolean;
   savePlan?: string;
+  upscale?: number; // render at size/upscale then nearest-neighbor upsize
+  filter?: 'neighbor' | 'lanczos' | 'bicubic';
 }
 
 function parseSize(s: string | undefined, fallback: [number, number]): [number, number] {
@@ -98,21 +100,32 @@ export async function render(opts: RenderOpts): Promise<void> {
   }
 
   const [wRaw, hRaw] = parseSize(opts.size, [1280, 720]);
-  const width = evenDown(wRaw);
-  const height = evenDown(hRaw);
+  const outputWidth = evenDown(wRaw);
+  const outputHeight = evenDown(hRaw);
+  const upscale = Math.max(1, Math.floor(opts.upscale ?? 1));
+  // Internal compositor render dims = output / upscale, rounded down to even.
+  const width = upscale > 1 ? evenDown(Math.floor(outputWidth / upscale)) : outputWidth;
+  const height = upscale > 1 ? evenDown(Math.floor(outputHeight / upscale)) : outputHeight;
   const fps = opts.fps ?? plan.fps;
 
   const totalMs = plan.shots.reduce((s, sh) => s + sh.durationMs, 0);
   const totalFrames = Math.ceil((totalMs / 1000) * fps);
-  process.stderr.write(
-    `terpix render: encoding ${width}x${height} @ ${fps}fps × ~${totalFrames} frames → ${opts.out}\n`,
-  );
+  if (upscale > 1) {
+    process.stderr.write(
+      `terpix render: composing ${width}x${height} → upscale x${upscale} (${opts.filter ?? 'neighbor'}) → ${outputWidth}x${outputHeight} @ ${fps}fps × ~${totalFrames} frames → ${opts.out}\n`,
+    );
+  } else {
+    process.stderr.write(
+      `terpix render: encoding ${width}x${height} @ ${fps}fps × ~${totalFrames} frames → ${opts.out}\n`,
+    );
+  }
 
   const encoder = new FfmpegMp4Encoder({
     output: opts.out,
     width,
     height,
     fps,
+    ...(upscale > 1 ? { outputWidth, outputHeight, upscaleFilter: opts.filter ?? 'neighbor' } : {}),
     ...(opts.preset ? { preset: opts.preset } : {}),
     ...(opts.crf !== undefined ? { crf: opts.crf } : {}),
     ...(opts.audio ? { audioPath: opts.audio } : {}),

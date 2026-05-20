@@ -52,12 +52,37 @@ describe('buildFfmpegArgs', () => {
     expect(args).toContain('-shortest');
   });
 
-  it('rejects odd dimensions (yuv420p constraint)', () => {
+  it('rejects odd OUTPUT dimensions (yuv420p constraint)', () => {
     expect(() =>
       buildFfmpegArgs({ output: 'x.mp4', width: 1281, height: 720, fps: 24 }),
     ).toThrow(/even/);
     expect(() =>
       buildFfmpegArgs({ output: 'x.mp4', width: 640, height: 481, fps: 24 }),
     ).toThrow(/even/);
+  });
+
+  it('inserts nearest-neighbor scale filter when output dims differ', () => {
+    const args = buildFfmpegArgs({
+      output: 'pixel.mp4',
+      width: 160,
+      height: 80,
+      outputWidth: 1920,
+      outputHeight: 960,
+      upscaleFilter: 'neighbor',
+      fps: 24,
+    });
+    expect(args).toContain('-vf');
+    expect(args[args.indexOf('-vf') + 1]).toBe('scale=1920:960:flags=neighbor');
+    expect(args[args.indexOf('-s') + 1]).toBe('160x80');
+  });
+
+  it('does not insert scale filter when input == output', () => {
+    const args = buildFfmpegArgs({
+      output: 'same.mp4',
+      width: 1280,
+      height: 720,
+      fps: 24,
+    });
+    expect(args).not.toContain('-vf');
   });
 });

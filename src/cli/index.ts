@@ -112,6 +112,8 @@ program
   .option('--model <id>', 'Anthropic model id (NL only)', 'claude-sonnet-4-6')
   .option('--style <name>', 'override plan style')
   .option('--audio <path>', 'mux an audio track into the output')
+  .option('--upscale <n>', 'render small, then upscale by N for chunky terminal look (default 1 = off)', (v) => parseInt(v, 10))
+  .option('--filter <name>', 'upscale filter: neighbor | lanczos | bicubic', 'neighbor')
   .option('--preset <name>', 'x264 preset (ultrafast..veryslow)', 'medium')
   .option('--crf <n>', 'x264 crf (lower=better, 18 is visually lossless)', (v) => parseInt(v, 10))
   .option('--save-plan <path>', 'also write the generated plan to disk (NL only)')
@@ -121,6 +123,7 @@ program
     opts: {
       out: string; size?: string; fps?: number; duration: string;
       model?: string; style?: string; audio?: string;
+      upscale?: number; filter?: string;
       preset?: string; crf?: number; savePlan?: string; force?: boolean;
     },
   ) => {
@@ -134,6 +137,8 @@ program
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.style ? { style: opts.style } : {}),
       ...(opts.audio ? { audio: opts.audio } : {}),
+      ...(opts.upscale !== undefined ? { upscale: opts.upscale } : {}),
+      ...(opts.filter ? { filter: opts.filter as 'neighbor' | 'lanczos' | 'bicubic' } : {}),
       ...(opts.preset ? { preset: opts.preset } : {}),
       ...(opts.crf !== undefined ? { crf: opts.crf } : {}),
       ...(opts.savePlan ? { savePlan: opts.savePlan } : {}),

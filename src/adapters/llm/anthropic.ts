@@ -110,27 +110,32 @@ export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
         : baseUserMsg +
           `\n\nThe previous attempt failed schema validation:\n${lastErr}\n` +
           `Re-emit a corrected plan; use only listed asset names and the exact field shapes.`;
-    const resp = await client.messages.create({
-      model,
-      max_tokens: 4096,
-      system: [
-        {
-          type: 'text',
-          text: system,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      tools: [
-        {
-          name: 'submit_plan',
-          description:
-            'Submit the final ScenePlan v1 JSON for rendering. Call exactly once with the plan as the tool input.',
-          input_schema: inputSchema as Anthropic.Messages.Tool.InputSchema,
-        },
-      ],
-      tool_choice: { type: 'tool', name: 'submit_plan' },
-      messages: [{ role: 'user', content: userMsg }],
-    });
+    let resp: Awaited<ReturnType<typeof client.messages.create>>;
+    try {
+      resp = await client.messages.create({
+        model,
+        max_tokens: 4096,
+        system: [
+          {
+            type: 'text',
+            text: system,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        tools: [
+          {
+            name: 'submit_plan',
+            description:
+              'Submit the final ScenePlan v1 JSON for rendering. Call exactly once with the plan as the tool input.',
+            input_schema: inputSchema as Anthropic.Messages.Tool.InputSchema,
+          },
+        ],
+        tool_choice: { type: 'tool', name: 'submit_plan' },
+        messages: [{ role: 'user', content: userMsg }],
+      });
+    } catch (err) {
+      return { ok: false, error: friendlyApiError(err), attempts: attempt };
+    }
 
     const usage = resp.usage as unknown as {
       input_tokens?: number;
@@ -171,4 +176,38 @@ export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
     error: `planFromNL failed after ${maxRetries} attempts: ${lastErr ?? 'unknown'}`,
     attempts: maxRetries,
   };
+}
+
+interface SdkErrorShape {
+  status?: number;
+  error?: { error?: { type?: string; message?: string } };
+  message?: string;
+}
+
+export function friendlyApiError(err: unknown): string {
+  const e = err as SdkErrorShape;
+  const status = typeof e.status === 'number' ? e.status : undefined;
+  const apiMsg = e.error?.error?.message;
+  const apiType = e.error?.error?.type;
+  const lowMsg = (apiMsg ?? '').toLowerCase();
+
+  if (status === 401) {
+    return 'Anthropic API key rejected (401). Verify the key with: terpix config show. Replace via: terpix config set anthropic_api_key sk-ant-...';
+  }
+  if (status === 400 && (lowMsg.includes('credit balance') || lowMsg.includes('billing'))) {
+    return 'Anthropic credit balance too low. Top up at https://console.anthropic.com/settings/billing or use a different key (terpix config set anthropic_api_key ...).';
+  }
+  if (status === 429) {
+    return 'Anthropic API rate-limited (429). Wait a moment and try again, or switch model with --model.';
+  }
+  if (status === 529) {
+    return 'Anthropic API overloaded (529). Retry shortly.';
+  }
+  if (status && apiMsg) {
+    return `Anthropic API error ${status} (${apiType ?? 'unknown'}): ${apiMsg}`;
+  }
+  if (status) {
+    return `Anthropic API error ${status}`;
+  }
+  return `LLM call failed: ${e.message ?? String(err)}`;
 }

@@ -4,7 +4,7 @@ import { HalfBlockEncoder } from '../../adapters/terminal/half-block.js';
 import { TerminalDriver, probeCaps } from '../../adapters/terminal/driver.js';
 import { computeRenderSize } from '../render-size.js';
 import { composite } from '../../core/compositor.js';
-import { planFromNL } from '../../adapters/llm/anthropic.js';
+import { planFromNL, hasAnthropicApiKey } from '../../adapters/llm/anthropic.js';
 import { parseDurationMs } from './plan.js';
 import { StylePresetName, type ScenePlanT } from '../../core/dsl.js';
 import type { RGBFrame } from '../../core/types.js';
@@ -84,8 +84,12 @@ async function playVideo(input: string, opts: PlayOpts): Promise<void> {
 }
 
 async function playNL(prompt: string, opts: PlayOpts): Promise<void> {
-  if (!process.env['ANTHROPIC_API_KEY']) {
-    console.error("terpix play: input '" + prompt + "' is not a video file, and ANTHROPIC_API_KEY is not set for NL planning.");
+  if (!hasAnthropicApiKey()) {
+    console.error(
+      "terpix play: input '" + prompt + "' is not a video file, and no Anthropic API key found.\n" +
+        "  Set one with: terpix config set anthropic_api_key sk-ant-...\n" +
+        "  Or export ANTHROPIC_API_KEY in your shell.",
+    );
     process.exit(2);
   }
   if (opts.style) {

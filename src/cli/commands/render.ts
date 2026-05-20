@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { composite } from '../../core/compositor.js';
 import { loadPlanFromFile } from '../../core/plan-loader.js';
 import { FfmpegMp4Encoder } from '../../adapters/ffmpeg/encoder.js';
-import { planFromNL } from '../../adapters/llm/anthropic.js';
+import { planFromNL, hasAnthropicApiKey } from '../../adapters/llm/anthropic.js';
 import { parseDurationMs } from './plan.js';
 import { StylePresetName, type ScenePlanT } from '../../core/dsl.js';
 
@@ -55,8 +55,12 @@ async function loadOrPlan(opts: RenderOpts): Promise<ScenePlanT> {
     }
     return r.plan;
   }
-  if (!process.env['ANTHROPIC_API_KEY']) {
-    console.error("terpix render: input is not a .json plan, and ANTHROPIC_API_KEY is not set for NL planning.");
+  if (!hasAnthropicApiKey()) {
+    console.error(
+      "terpix render: input is not a .json plan, and no Anthropic API key found.\n" +
+        "  Set one with: terpix config set anthropic_api_key sk-ant-...\n" +
+        "  Or export ANTHROPIC_API_KEY in your shell.",
+    );
     process.exit(2);
   }
   if (opts.style) {

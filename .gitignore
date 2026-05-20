@@ -7,3 +7,12 @@ coverage/
 .DS_Store
 ~/.cache/terpix/
 terpix-assets/
+
+# local test outputs
+*.mp4
+*.mov
+*.webm
+*.gif
+/cat.json
+/plan.json
+/out.json

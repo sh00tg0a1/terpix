@@ -164,14 +164,14 @@ program
 
 program
   .command('config')
-  .description('Manage ~/.config/terpix/config.json (API key, default model, default style/renderer)')
-  .argument('<subcommand>', 'show | get <key> | set <key> [value] | unset <key> | path')
-  .argument('[key]', 'config key (anthropic_api_key | default_model | default_style | default_renderer)')
+  .description('Manage ~/.config/terpix/config.json (API key, provider, default model, default style/renderer)')
+  .argument('<subcommand>', 'show | setup | get <key> | set <key> [value] | unset <key> | path')
+  .argument('[key]', 'config key (provider | anthropic_api_key | openai_api_key | minimax_api_key | openai_compat_api_key | openai_compat_base_url | default_model | default_style | default_renderer)')
   .argument('[value]', 'value (omit for `set` to prompt with hidden input on a TTY)')
   .action(async (subcommand: string, key?: string, value?: string) => {
-    const sub = subcommand as 'show' | 'get' | 'set' | 'unset' | 'path';
-    if (!['show', 'get', 'set', 'unset', 'path'].includes(sub)) {
-      console.error(`terpix config: unknown subcommand '${subcommand}'. Try: show | get | set | unset | path`);
+    const sub = subcommand as 'show' | 'setup' | 'get' | 'set' | 'unset' | 'path';
+    if (!['show', 'setup', 'get', 'set', 'unset', 'path'].includes(sub)) {
+      console.error(`terpix config: unknown subcommand '${subcommand}'. Try: show | setup | get | set | unset | path`);
       process.exit(1);
     }
     await configCmd({

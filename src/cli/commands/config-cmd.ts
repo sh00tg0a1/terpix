@@ -5,10 +5,17 @@ import {
   readConfig,
   updateConfig,
   type ConfigT,
+  type ProviderNameT,
 } from '../../core/config.js';
+import { activeProviderLabel } from '../../adapters/llm/provider.js';
 
 const KNOWN_KEYS = new Set<keyof ConfigT>([
+  'provider',
   'anthropic_api_key',
+  'openai_api_key',
+  'minimax_api_key',
+  'openai_compat_api_key',
+  'openai_compat_base_url',
   'default_model',
   'default_style',
   'default_renderer',
@@ -19,7 +26,7 @@ function isKnownKey(k: string): k is keyof ConfigT {
 }
 
 export interface ConfigCmdOpts {
-  subcommand: 'show' | 'get' | 'set' | 'unset' | 'path';
+  subcommand: 'show' | 'get' | 'set' | 'unset' | 'path' | 'setup';
   key?: string;
   value?: string;
 }
@@ -37,6 +44,8 @@ export async function configCmd(opts: ConfigCmdOpts): Promise<void> {
       return set(opts.key, opts.value);
     case 'unset':
       return unset(opts.key);
+    case 'setup':
+      return await setupWizard();
   }
 }
 
@@ -44,20 +53,45 @@ function show(): void {
   const info = configFileInfo();
   const cfg = readConfig();
   console.log(`config: ${info.path}` + (info.exists ? ` (mode ${info.mode})` : ' (not yet created)'));
-  for (const key of KNOWN_KEYS) {
+
+  // Provider & keys section
+  console.log('provider:');
+  console.log(`  provider = ${cfg.provider ?? 'anthropic'}`);
+
+  console.log('api keys:');
+  const apiKeys: (keyof ConfigT)[] = [
+    'anthropic_api_key',
+    'openai_api_key',
+    'minimax_api_key',
+    'openai_compat_api_key',
+    'openai_compat_base_url',
+  ];
+  for (const key of apiKeys) {
     const v = cfg[key];
     if (v === undefined) {
       console.log(`  ${key} = (unset)`);
-    } else if (key === 'anthropic_api_key') {
-      console.log(`  ${key} = ${maskKey(v)}`);
+    } else if (key.includes('api_key')) {
+      console.log(`  ${key} = ${maskKey(v as string)}`);
     } else {
       console.log(`  ${key} = ${v}`);
     }
   }
+
+  console.log('defaults:');
+  for (const key of ['default_model', 'default_style', 'default_renderer'] as const) {
+    const v = cfg[key];
+    console.log(`  ${key} = ${v ?? '(unset)'}`);
+  }
+
   console.log('');
-  console.log('overrides:');
-  console.log(`  ANTHROPIC_API_KEY env = ${maskKey(process.env['ANTHROPIC_API_KEY'])}`);
-  console.log(`  TERPIX_MODEL env      = ${process.env['TERPIX_MODEL'] ?? '(unset)'}`);
+  console.log('env overrides:');
+  console.log(`  ANTHROPIC_API_KEY = ${maskKey(process.env['ANTHROPIC_API_KEY'])}`);
+  console.log(`  OPENAI_API_KEY = ${maskKey(process.env['OPENAI_API_KEY'])}`);
+  console.log(`  MINIMAX_API_KEY = ${maskKey(process.env['MINIMAX_API_KEY'])}`);
+  console.log(`  OPENAI_COMPAT_API_KEY = ${maskKey(process.env['OPENAI_COMPAT_API_KEY'])}`);
+  console.log(`  OPENAI_COMPAT_BASE_URL = ${process.env['OPENAI_COMPAT_BASE_URL'] ?? '(unset)'}`);
+  console.log(`  TERPIX_PROVIDER = ${process.env['TERPIX_PROVIDER'] ?? '(unset)'}`);
+  console.log(`  TERPIX_MODEL = ${process.env['TERPIX_MODEL'] ?? '(unset)'}`);
 }
 
 function get(key: string | undefined): void {
@@ -74,7 +108,7 @@ function get(key: string | undefined): void {
     console.log('');
     return;
   }
-  if (key === 'anthropic_api_key') {
+  if ((key as string).includes('api_key')) {
     console.log(maskKey(v as string));
   } else {
     console.log(v);
@@ -104,7 +138,7 @@ function set(key: string | undefined, value: string | undefined): void {
 function writeAndReport(key: keyof ConfigT, value: string): void {
   try {
     const { path } = updateConfig({ [key]: value } as Partial<ConfigT>);
-    if (key === 'anthropic_api_key') {
+    if ((key as string).includes('api_key')) {
       console.log(`saved ${key} = ${maskKey(value)} to ${path}`);
     } else {
       console.log(`saved ${key} = ${value} to ${path}`);
@@ -128,9 +162,7 @@ function unset(key: string | undefined): void {
   console.log(`removed ${key} from ${path}`);
 }
 
-async function promptValue(key: keyof ConfigT): Promise<string> {
-  const isSecret = key === 'anthropic_api_key';
-  const prompt = isSecret ? `${key} (input hidden): ` : `${key}: `;
+function promptValueInternal(promptText: string, isSecret: boolean = false): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
     const stdout = process.stdout as unknown as { write: (s: string) => boolean };
@@ -142,13 +174,109 @@ async function promptValue(key: keyof ConfigT): Promise<string> {
         write: { value: (s: string) => (typeof s === 'string' && s.includes('\n') ? stdout.write('\n') : true) },
       });
       (rl as unknown as { output: NodeJS.WritableStream }).output = muted;
-      process.stdout.write(prompt);
+      process.stdout.write(promptText);
     }
-    rl.question(isSecret && stdin.isTTY ? '' : prompt, (line) => {
+    rl.question(isSecret && stdin.isTTY ? '' : promptText, (line) => {
       rl.close();
       const value = (line ?? '').trim();
       if (!value) return reject(new Error('empty value'));
       resolve(value);
     });
   });
+}
+
+async function promptValue(key: keyof ConfigT): Promise<string> {
+  const isSecret = (key as string).includes('api_key');
+  const prompt = isSecret ? `${key} (input hidden): ` : `${key}: `;
+  return promptValueInternal(prompt, isSecret);
+}
+
+async function setupWizard(): Promise<void> {
+  console.log('\nterpix config setup wizard\n');
+
+  // Step 1: Choose provider
+  console.log('Which LLM provider?');
+  console.log('  [1] anthropic   (Claude 3.5 Sonnet, etc.)');
+  console.log('  [2] openai      (GPT-4o, etc.)');
+  console.log('  [3] minimax     (abab6.5s-chat, etc.)');
+  console.log('  [4] openai-compat (self-hosted / proxied)');
+
+  let providerNum: string;
+  try {
+    providerNum = await promptValueInternal('Enter choice [1-4]: ', false);
+  } catch (err) {
+    console.error('setup cancelled.');
+    process.exit(1);
+  }
+
+  const providerMap: Record<string, ProviderNameT> = {
+    '1': 'anthropic',
+    '2': 'openai',
+    '3': 'minimax',
+    '4': 'openai-compat',
+  };
+
+  const provider = providerMap[providerNum];
+  if (!provider) {
+    console.error('Invalid choice. Exiting.');
+    process.exit(1);
+  }
+
+  // Step 2: API key
+  const apiKeyField = `${provider === 'openai-compat' ? 'openai_compat' : provider}_api_key` as keyof ConfigT;
+  let apiKey: string;
+  try {
+    apiKey = await promptValueInternal(`Enter ${provider} API key (input hidden): `, true);
+  } catch (err) {
+    console.error('setup cancelled.');
+    process.exit(1);
+  }
+
+  const updates: Partial<ConfigT> = {
+    provider,
+    [apiKeyField]: apiKey,
+  };
+
+  // Step 3: openai-compat base URL
+  if (provider === 'openai-compat') {
+    try {
+      const baseURL = await promptValueInternal('Base URL (e.g., https://api.example.com/v1): ', false);
+      updates.openai_compat_base_url = baseURL;
+    } catch (err) {
+      console.error('setup cancelled.');
+      process.exit(1);
+    }
+  }
+
+  // Step 4: optional default model
+  const PROVIDER_DEFAULT_MODELS: Record<ProviderNameT, string> = {
+    anthropic: 'claude-sonnet-4-6',
+    openai: 'gpt-4o',
+    minimax: 'abab6.5s-chat',
+    'openai-compat': 'gpt-4o',
+  };
+  const defaultModel = PROVIDER_DEFAULT_MODELS[provider];
+  let modelInput: string;
+  try {
+    modelInput = await promptValueInternal(
+      `Default model (Enter to use '${defaultModel}'): `,
+      false,
+    );
+    if (modelInput) {
+      updates.default_model = modelInput;
+    }
+  } catch (err) {
+    // Empty input (cancel) is ok for optional field
+  }
+
+  // Save all changes at once
+  try {
+    const { path } = updateConfig(updates);
+    console.log('');
+    console.log(`✓ Saved to ${path}`);
+    console.log(`Active: ${activeProviderLabel()}`);
+  } catch (err) {
+    console.error('Failed to save: ' + (err as Error).message);
+    process.exit(1);
+  }
 }

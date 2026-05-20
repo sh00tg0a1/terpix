@@ -24,11 +24,24 @@ program
 
 program
   .command('play')
-  .description('Decode a video and play it in the current terminal')
-  .argument('<input>', 'path to a video file')
-  .option('--fps <n>', 'target frames per second', (v) => parseInt(v, 10), 24)
-  .action(async (input: string, opts: { fps: number }) => {
-    await play(input, { fps: opts.fps });
+  .description('Play a video file OR an NL prompt (calls Claude → renders inline)')
+  .argument('<input>', 'video file path OR natural-language prompt')
+  .option('--fps <n>', 'target frames per second (video only)', (v) => parseInt(v, 10), 24)
+  .option('--duration <t>', 'NL prompt total duration (e.g. 15s, 1m)', '15s')
+  .option('--model <id>', 'Anthropic model id (NL only)', 'claude-sonnet-4-6')
+  .option('--style <name>', 'override plan style (NL only)')
+  .option('--save-plan <path>', 'also write the generated plan to disk (NL only)')
+  .action(async (
+    input: string,
+    opts: { fps: number; duration: string; model?: string; style?: string; savePlan?: string },
+  ) => {
+    await play(input, {
+      fps: opts.fps,
+      duration: opts.duration,
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.savePlan ? { savePlan: opts.savePlan } : {}),
+    });
   });
 
 program

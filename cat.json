@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "title": "moonlit cat walk",
+  "fps": 24,
+  "style": "silhouette",
+  "renderer": "half",
+  "shots": [
+    {
+      "id": "stroll",
+      "durationMs": 6000,
+      "background": {
+        "type": "nebula",
+        "colorA": "#0a0a2a",
+        "colorB": "#2a1a4a",
+        "scale": 0.02,
+        "seed": 7
+      },
+      "layers": [
+        {
+          "type": "sprite",
+          "asset": "moon",
+          "color": "#f9e9b8",
+          "keyframes": [
+            {
+              "tMs": 0,
+              "x": 0.78,
+              "y": 0.22,
+              "scale": 1.2
+            }
+          ],
+          "ease": "linear"
+        },
+        {
+          "type": "sprite",
+          "asset": "mountain",
+          "color": "#10101a",
+          "keyframes": [
+            {
+              "tMs": 0,
+              "x": 0.5,
+              "y": 0.78,
+              "scale": 3
+            }
+          ],
+          "ease": "linear"
+        },
+        {
+          "type": "sprite",
+          "asset": "cat",
+          "color": "#050505",
+          "keyframes": [
+            {
+              "tMs": 0,
+              "x": -0.15,
+              "y": 0.58,
+              "scale": 0.7,
+              "opacity": 1
+            },
+            {
+              "tMs": 6000,
+              "x": 1.15,
+              "y": 0.58,
+              "scale": 0.7,
+              "opacity": 1
+            }
+          ],
+          "ease": "easeInOut"
+        }
+      ]
+    }
+  ]
+}

@@ -30,7 +30,7 @@ program
   .argument('<input>', 'video file path OR natural-language prompt')
   .option('--fps <n>', 'target frames per second (video only)', (v) => parseInt(v, 10), 24)
   .option('--duration <t>', 'NL prompt total duration (e.g. 15s, 1m)', '15s')
-  .option('--model <id>', 'Anthropic model id (NL only)', 'claude-sonnet-4-6')
+  .option('--model <id>', 'LLM model id (NL only, defaults to config default_model)')
   .option('--style <name>', 'override plan style (NL only)')
   .option('--save-plan <path>', 'also write the generated plan to disk (NL only)')
   .action(async (
@@ -81,7 +81,7 @@ program
   .argument('<prompt>', 'natural-language description of the scene')
   .option('--duration <t>', 'total duration (e.g. 15s, 1m30s, 500ms)', '15s')
   .option('-o, --out <path>', 'output file (default stdout); "-" also = stdout')
-  .option('--model <id>', 'Anthropic model id', 'claude-sonnet-4-6')
+  .option('--model <id>', 'LLM model id (defaults to config default_model)')
   .option('--renderer <name>', 'half | ascii', 'half')
   .option('--style <name>', 'default | starwars | minimalist | silhouette | noir')
   .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string }) => {
@@ -110,7 +110,7 @@ program
   .option('--size <WxH>', 'output dimensions in pixels (default 1280x720)')
   .option('--fps <n>', 'fps (override plan.fps)', (v) => parseInt(v, 10))
   .option('--duration <t>', 'NL prompt total duration (e.g. 15s, 1m)', '15s')
-  .option('--model <id>', 'Anthropic model id (NL only)', 'claude-sonnet-4-6')
+  .option('--model <id>', 'LLM model id (NL only, defaults to config default_model)')
   .option('--style <name>', 'override plan style')
   .option('--audio <path>', 'mux an audio track into the output')
   .option('--upscale <n>', 'render small, then upscale by N for chunky terminal look (default 1 = off)', (v) => parseInt(v, 10))

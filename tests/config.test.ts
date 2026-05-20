@@ -8,7 +8,12 @@ import {
   configPath,
   getAnthropicApiKey,
   getDefaultModel,
+  getMinimaxApiKey,
+  getOpenAIApiKey,
+  getOpenAICompatConfig,
+  getProvider,
   maskKey,
+  ProviderName,
   readConfig,
   updateConfig,
   writeConfig,
@@ -22,9 +27,19 @@ describe('config', () => {
     dir = mkdtempSync(join(tmpdir(), 'terpix-cfg-'));
     savedEnv['TERPIX_CONFIG'] = process.env['TERPIX_CONFIG'];
     savedEnv['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
+    savedEnv['OPENAI_API_KEY'] = process.env['OPENAI_API_KEY'];
+    savedEnv['MINIMAX_API_KEY'] = process.env['MINIMAX_API_KEY'];
+    savedEnv['OPENAI_COMPAT_API_KEY'] = process.env['OPENAI_COMPAT_API_KEY'];
+    savedEnv['OPENAI_COMPAT_BASE_URL'] = process.env['OPENAI_COMPAT_BASE_URL'];
+    savedEnv['TERPIX_PROVIDER'] = process.env['TERPIX_PROVIDER'];
     savedEnv['TERPIX_MODEL'] = process.env['TERPIX_MODEL'];
     process.env['TERPIX_CONFIG'] = join(dir, 'config.json');
     delete process.env['ANTHROPIC_API_KEY'];
+    delete process.env['OPENAI_API_KEY'];
+    delete process.env['MINIMAX_API_KEY'];
+    delete process.env['OPENAI_COMPAT_API_KEY'];
+    delete process.env['OPENAI_COMPAT_BASE_URL'];
+    delete process.env['TERPIX_PROVIDER'];
     delete process.env['TERPIX_MODEL'];
   });
 
@@ -123,5 +138,104 @@ describe('config', () => {
     const p = join(dir, 'config.json');
     writeFileSync(p, JSON.stringify({ default_renderer: 'metaball' }));
     expect(() => readConfig()).toThrow(/default_renderer/);
+  });
+
+  // --- multi-provider tests ---
+
+  it('ProviderName accepts all four known providers', () => {
+    expect(ProviderName.safeParse('anthropic').success).toBe(true);
+    expect(ProviderName.safeParse('openai').success).toBe(true);
+    expect(ProviderName.safeParse('minimax').success).toBe(true);
+    expect(ProviderName.safeParse('openai-compat').success).toBe(true);
+    expect(ProviderName.safeParse('bogus').success).toBe(false);
+  });
+
+  it('Config accepts all per-provider api key fields', () => {
+    const result = Config.safeParse({
+      provider: 'minimax',
+      anthropic_api_key: 'sk-ant-1234567890',
+      openai_api_key: 'sk-openai-12345',
+      minimax_api_key: 'mm-12345678',
+      openai_compat_api_key: 'oc-12345678',
+      openai_compat_base_url: 'https://example.com/v1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('Config rejects invalid base URL', () => {
+    expect(
+      Config.safeParse({ openai_compat_base_url: 'not-a-url' }).success,
+    ).toBe(false);
+  });
+
+  it('getProvider: default is anthropic when nothing set', () => {
+    expect(getProvider()).toBe('anthropic');
+  });
+
+  it('getProvider: env wins over config', () => {
+    writeConfig({ provider: 'minimax' });
+    process.env['TERPIX_PROVIDER'] = 'openai';
+    expect(getProvider()).toBe('openai');
+  });
+
+  it('getProvider: falls back to config when env unset', () => {
+    writeConfig({ provider: 'minimax' });
+    expect(getProvider()).toBe('minimax');
+  });
+
+  it('getProvider: ignores invalid env value', () => {
+    writeConfig({ provider: 'minimax' });
+    process.env['TERPIX_PROVIDER'] = 'gibberish';
+    expect(getProvider()).toBe('minimax');
+  });
+
+  it('getOpenAIApiKey: env > config > undefined', () => {
+    expect(getOpenAIApiKey()).toBeUndefined();
+    writeConfig({ openai_api_key: 'sk-openai-config' });
+    expect(getOpenAIApiKey()).toBe('sk-openai-config');
+    process.env['OPENAI_API_KEY'] = 'sk-openai-env';
+    expect(getOpenAIApiKey()).toBe('sk-openai-env');
+  });
+
+  it('getMinimaxApiKey: env > config > undefined', () => {
+    expect(getMinimaxApiKey()).toBeUndefined();
+    writeConfig({ minimax_api_key: 'mm-config-1234' });
+    expect(getMinimaxApiKey()).toBe('mm-config-1234');
+    process.env['MINIMAX_API_KEY'] = 'mm-env-9999';
+    expect(getMinimaxApiKey()).toBe('mm-env-9999');
+  });
+
+  it('getOpenAICompatConfig: env wins over config for both fields', () => {
+    writeConfig({
+      openai_compat_api_key: 'oc-config-1234',
+      openai_compat_base_url: 'https://config.example.com/v1',
+    });
+    expect(getOpenAICompatConfig()).toEqual({
+      key: 'oc-config-1234',
+      baseURL: 'https://config.example.com/v1',
+    });
+    process.env['OPENAI_COMPAT_API_KEY'] = 'oc-env-9999';
+    process.env['OPENAI_COMPAT_BASE_URL'] = 'https://env.example.com/v1';
+    expect(getOpenAICompatConfig()).toEqual({
+      key: 'oc-env-9999',
+      baseURL: 'https://env.example.com/v1',
+    });
+  });
+
+  it('getOpenAICompatConfig: returns undefined fields when nothing set', () => {
+    expect(getOpenAICompatConfig()).toEqual({ key: undefined, baseURL: undefined });
+  });
+
+  it('getDefaultModel: returns provider-specific defaults', () => {
+    expect(getDefaultModel('anthropic')).toBe('claude-sonnet-4-6');
+    expect(getDefaultModel('openai')).toBe('gpt-4o');
+    expect(getDefaultModel('minimax')).toBe('abab6.5s-chat');
+    expect(getDefaultModel('openai-compat')).toBe('gpt-4o');
+  });
+
+  it('getDefaultModel: config default_model overrides provider built-in', () => {
+    writeConfig({ provider: 'minimax', default_model: 'custom-model-x' });
+    expect(getDefaultModel('minimax')).toBe('custom-model-x');
+    expect(getDefaultModel('anthropic')).toBe('custom-model-x');
   });
 });

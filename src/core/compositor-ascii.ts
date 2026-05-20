@@ -118,9 +118,14 @@ function drawTextLayer(
   if (layer.style === 'fade-in' && t < 0.3) return;
   const shown = layer.content.slice(0, visibleChars);
   if (layer.style === 'crawl') {
+    // Match the half-block pacing: smoothstep ease + 0.7 distance factor
+    // so the text lingers in the middle of the frame and never quite
+    // exits off the top.
+    const eased = t * t * (3 - 2 * t);
+    const speedFactor = 0.7;
     const lines = shown.split('\n');
     const totalRows = buf.h + lines.length;
-    const baseY = Math.floor(buf.h - t * totalRows);
+    const baseY = Math.floor(buf.h - eased * totalRows * speedFactor);
     lines.forEach((line, i) => {
       const x = Math.floor(layer.position.x * buf.w - line.length / 2);
       drawString(buf, line, x, baseY + i, color[0], color[1], color[2]);

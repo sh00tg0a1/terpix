@@ -124,7 +124,13 @@ function drawTextLayer(
   if (layer.style === 'fade-in') alpha = Math.round(255 * Math.min(1, t * 2));
   const shown = layer.content.slice(0, visibleChars);
   if (layer.style === 'crawl') {
-    const baseY = buf.h - t * (buf.h + shown.length * px);
+    // Readable Star-Wars crawl: text only travels ~70% of the full path
+    // over the shot (it never fully exits the top), and the eased curve
+    // (smoothstep) lingers in the middle where it's most visible. Net
+    // effect: ≈40% slower perceived speed in the readable zone.
+    const eased = t * t * (3 - 2 * t);
+    const speedFactor = 0.7;
+    const baseY = buf.h - eased * (buf.h + shown.length * px) * speedFactor;
     drawTextBlock(buf, shown, layer.position.x * buf.w, baseY, px, color, alpha, true);
   } else {
     // position.y is the VERTICAL CENTER of the whole text block. Multi-line

@@ -3,8 +3,20 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
+export const ProviderName = z.enum(['anthropic', 'openai', 'minimax', 'openai-compat']);
+export type ProviderNameT = z.infer<typeof ProviderName>;
+
 export const Config = z.object({
+  // LLM provider selection. Defaults to 'anthropic' if unset.
+  provider: ProviderName.optional(),
+  // Per-provider keys. The active one is picked by `provider`.
   anthropic_api_key: z.string().min(8).optional(),
+  openai_api_key: z.string().min(8).optional(),
+  minimax_api_key: z.string().min(8).optional(),
+  // For self-hosted / proxied OpenAI-compatible deployments.
+  openai_compat_api_key: z.string().min(8).optional(),
+  openai_compat_base_url: z.string().url().optional(),
+  // Rendering defaults.
   default_model: z.string().min(1).optional(),
   default_style: z.string().min(1).optional(),
   default_renderer: z.enum(['half', 'ascii']).optional(),
@@ -76,12 +88,52 @@ export function updateConfig(patch: Partial<ConfigT>): { path: string; config: C
 export function getAnthropicApiKey(): string | undefined {
   const env = process.env['ANTHROPIC_API_KEY'];
   if (env && env.length > 0) return env;
-  const cfg = readConfig();
-  return cfg.anthropic_api_key;
+  return readConfig().anthropic_api_key;
 }
 
-export function getDefaultModel(): string {
-  return process.env['TERPIX_MODEL'] ?? readConfig().default_model ?? 'claude-sonnet-4-6';
+export function getOpenAIApiKey(): string | undefined {
+  const env = process.env['OPENAI_API_KEY'];
+  if (env && env.length > 0) return env;
+  return readConfig().openai_api_key;
+}
+
+export function getMinimaxApiKey(): string | undefined {
+  const env = process.env['MINIMAX_API_KEY'];
+  if (env && env.length > 0) return env;
+  return readConfig().minimax_api_key;
+}
+
+export function getOpenAICompatConfig(): { key?: string; baseURL?: string } {
+  const cfg = readConfig();
+  return {
+    key: process.env['OPENAI_COMPAT_API_KEY'] ?? cfg.openai_compat_api_key,
+    baseURL: process.env['OPENAI_COMPAT_BASE_URL'] ?? cfg.openai_compat_base_url,
+  };
+}
+
+export function getProvider(): ProviderNameT {
+  const env = process.env['TERPIX_PROVIDER'];
+  if (env) {
+    const parsed = ProviderName.safeParse(env);
+    if (parsed.success) return parsed.data;
+  }
+  return readConfig().provider ?? 'anthropic';
+}
+
+// Model default depends on which provider is active.
+const PROVIDER_DEFAULT_MODELS: Record<ProviderNameT, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  minimax: 'MiniMax-M2.7',
+  'openai-compat': 'gpt-4o',
+};
+
+export function getDefaultModel(provider?: ProviderNameT): string {
+  const envOverride = process.env['TERPIX_MODEL'];
+  if (envOverride) return envOverride;
+  const cfg = readConfig();
+  if (cfg.default_model) return cfg.default_model;
+  return PROVIDER_DEFAULT_MODELS[provider ?? getProvider()];
 }
 
 export function maskKey(key: string | undefined): string {

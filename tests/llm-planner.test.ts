@@ -2,7 +2,12 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { clearRegistry } from '../src/core/assets/registry.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
-import { planFromNL } from '../src/adapters/llm/anthropic.js';
+import { planFromNLAnthropic } from '../src/adapters/llm/anthropic.js';
+
+// All planFromNL tests in this file target the Anthropic adapter directly,
+// bypassing the provider-resolution layer so the config file is irrelevant.
+const planFromNL = (req: Parameters<typeof planFromNLAnthropic>[0]) =>
+  planFromNLAnthropic(req, { apiKey: 'sk-mock', defaultModel: 'claude-sonnet-4-6' });
 import { catalogMarkdown, spriteEnumForSchema } from '../src/adapters/llm/asset-catalog.js';
 import { buildSystemPrompt } from '../src/adapters/llm/system-prompt.js';
 

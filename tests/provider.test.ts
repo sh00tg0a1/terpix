@@ -82,8 +82,8 @@ describe('provider resolution', () => {
     if ('error' in r) return;
     expect(r.kind).toBe('minimax');
     expect(r.apiKey).toBe('mm-12345678');
-    expect(r.baseURL).toBe('https://api.minimaxi.com/v1');
-    expect(r.defaultModel).toBe('abab6.5s-chat');
+    expect(r.baseURL).toBe('https://api.minimax.io/v1');
+    expect(r.defaultModel).toBe('MiniMax-M2.7');
   });
 
   it('minimax: error when key missing', () => {
@@ -139,8 +139,8 @@ describe('provider resolution', () => {
     writeConfig({ provider: 'minimax', minimax_api_key: 'mm-12345678' });
     const label = activeProviderLabel();
     expect(label).toContain('minimax');
-    expect(label).toContain('abab6.5s-chat');
-    expect(label).toContain('api.minimaxi.com');
+    expect(label).toContain('MiniMax-M2.7');
+    expect(label).toContain('api.minimax.io');
   });
 
   it('activeProviderLabel: no-key state', () => {

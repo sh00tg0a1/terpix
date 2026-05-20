@@ -1,0 +1,98 @@
+import {
+  getAnthropicApiKey,
+  getDefaultModel,
+  getMinimaxApiKey,
+  getOpenAIApiKey,
+  getOpenAICompatConfig,
+  getProvider,
+  type ProviderNameT,
+} from '../../core/config.js';
+import { planFromNLAnthropic } from './anthropic.js';
+import { planFromNLOpenAICompat } from './openai-compat.js';
+import type { PlanReq, PlanOk, PlanErr } from './types.js';
+
+const MINIMAX_BASE_URL = 'https://api.minimax.io/v1';
+
+export interface ResolvedProvider {
+  kind: ProviderNameT;
+  apiKey: string;
+  baseURL?: string;
+  defaultModel: string;
+}
+
+export function resolveProvider(overrideProvider?: ProviderNameT): ResolvedProvider | { error: string } {
+  const provider: ProviderNameT = overrideProvider ?? getProvider();
+  const defaultModel = getDefaultModel(provider);
+
+  switch (provider) {
+    case 'anthropic': {
+      const k = getAnthropicApiKey();
+      if (!k) {
+        return {
+          error:
+            "no Anthropic API key. Set with: terpix config set anthropic_api_key sk-ant-...",
+        };
+      }
+      return { kind: provider, apiKey: k, defaultModel };
+    }
+    case 'openai': {
+      const k = getOpenAIApiKey();
+      if (!k) {
+        return {
+          error: "no OpenAI API key. Set with: terpix config set openai_api_key sk-...",
+        };
+      }
+      return { kind: provider, apiKey: k, defaultModel };
+    }
+    case 'minimax': {
+      const k = getMinimaxApiKey();
+      if (!k) {
+        return {
+          error:
+            "no MiniMax API key. Set with: terpix config set minimax_api_key <key>",
+        };
+      }
+      return { kind: provider, apiKey: k, baseURL: MINIMAX_BASE_URL, defaultModel };
+    }
+    case 'openai-compat': {
+      const { key, baseURL } = getOpenAICompatConfig();
+      if (!key || !baseURL) {
+        return {
+          error:
+            'openai-compat requires both openai_compat_api_key and openai_compat_base_url. Set with: terpix config set openai_compat_api_key ... and terpix config set openai_compat_base_url https://...',
+        };
+      }
+      return { kind: provider, apiKey: key, baseURL, defaultModel };
+    }
+  }
+}
+
+export function hasLLMKey(overrideProvider?: ProviderNameT): boolean {
+  const r = resolveProvider(overrideProvider);
+  return !('error' in r);
+}
+
+export async function planFromNL(req: PlanReq & { provider?: ProviderNameT }): Promise<PlanOk | PlanErr> {
+  const resolved = resolveProvider(req.provider);
+  if ('error' in resolved) return { ok: false, error: resolved.error, attempts: 0 };
+
+  switch (resolved.kind) {
+    case 'anthropic':
+      return planFromNLAnthropic(req, { apiKey: resolved.apiKey, defaultModel: resolved.defaultModel });
+    case 'openai':
+    case 'minimax':
+    case 'openai-compat':
+      return planFromNLOpenAICompat(req, {
+        apiKey: resolved.apiKey,
+        defaultModel: resolved.defaultModel,
+        ...(resolved.baseURL ? { baseURL: resolved.baseURL } : {}),
+      });
+  }
+}
+
+export function activeProviderLabel(): string {
+  const p = getProvider();
+  const r = resolveProvider(p);
+  if ('error' in r) return `${p} (no key)`;
+  return `${p} (model: ${r.defaultModel}${r.baseURL ? `, baseURL: ${r.baseURL}` : ''})`;
+}

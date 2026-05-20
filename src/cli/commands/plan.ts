@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { planFromNL } from '../../adapters/llm/anthropic.js';
+import { planFromNL, hasLLMKey } from '../../adapters/llm/provider.js';
 
 export interface PlanCommandOpts {
   prompt: string;
@@ -21,8 +21,12 @@ export function parseDurationMs(raw: string): number {
 }
 
 export async function planCmd(opts: PlanCommandOpts): Promise<void> {
-  if (!process.env['ANTHROPIC_API_KEY']) {
-    console.error('terpix plan: ANTHROPIC_API_KEY env var is required.');
+  if (!hasLLMKey()) {
+    console.error(
+      'terpix plan: no LLM API key configured.\n' +
+        '  Run: terpix config show\n' +
+        '  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | openai_compat)',
+    );
     process.exit(2);
   }
   if (!opts.prompt || opts.prompt.trim() === '') {

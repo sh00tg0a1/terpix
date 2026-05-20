@@ -1,40 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ScenePlan, type ScenePlanT } from '../../core/dsl.js';
+import { ScenePlan } from '../../core/dsl.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
-import { getAnthropicApiKey, getDefaultModel } from '../../core/config.js';
-
-export interface PlanReq {
-  prompt: string;
-  durationMs: number;
-  size?: { w: number; h: number };
-  fps?: number;
-  renderer?: 'half' | 'ascii';
-  style?: string;
-  model?: string;
-  maxRetries?: number;
-  client?: Anthropic; // injectable for tests
-}
-
-export interface PlanOk {
-  ok: true;
-  plan: ScenePlanT;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreateTokens: number;
-  attempts: number;
-}
-
-export interface PlanErr {
-  ok: false;
-  error: string;
-  attempts: number;
-}
+import { friendlyApiError } from './errors.js';
+import { getAnthropicApiKey } from '../../core/config.js';
+import type { PlanReq, PlanOk, PlanErr } from './types.js';
 
 export function hasAnthropicApiKey(): boolean {
   return !!getAnthropicApiKey();
+}
+
+interface AnthropicCfg {
+  apiKey: string;
+  defaultModel: string;
 }
 
 // Inject the current asset registry into the JSON Schema so the tool input
@@ -43,9 +22,6 @@ export function hasAnthropicApiKey(): boolean {
 function buildInputSchema(renderer: 'half' | 'ascii'): Record<string, unknown> {
   const base = zodToJsonSchema(ScenePlan, { target: 'openApi3' }) as Record<string, unknown>;
   const enumNames = spriteEnumForSchema({ renderer });
-  // The discriminated union may live under various paths depending on
-  // zod-to-json-schema's output shape. Walk and patch all `asset` props
-  // sitting inside an object that also has `type: 'sprite'`.
   patchSpriteAssetEnum(base, enumNames);
   return base;
 }
@@ -53,7 +29,6 @@ function buildInputSchema(renderer: 'half' | 'ascii'): Record<string, unknown> {
 function patchSpriteAssetEnum(node: unknown, names: string[]): void {
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
-  // Heuristic: detect sprite-layer object schemas.
   if (
     obj['properties'] &&
     typeof obj['properties'] === 'object' &&
@@ -72,20 +47,11 @@ function patchSpriteAssetEnum(node: unknown, names: string[]): void {
   }
 }
 
-export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
-  const model = req.model ?? getDefaultModel();
+export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Promise<PlanOk | PlanErr> {
+  const model = req.model ?? cfg.defaultModel;
   const renderer = req.renderer ?? 'half';
   const maxRetries = req.maxRetries ?? 3;
-  const key = getAnthropicApiKey();
-  if (!req.client && !key) {
-    return {
-      ok: false,
-      error:
-        'no Anthropic API key. Set ANTHROPIC_API_KEY env, or run `terpix config set anthropic_api_key sk-ant-...`',
-      attempts: 0,
-    };
-  }
-  const client = req.client ?? new Anthropic(key ? { apiKey: key } : {});
+  const client = req.client ?? new Anthropic({ apiKey: cfg.apiKey });
 
   const system = buildSystemPrompt({ renderer });
   const inputSchema = buildInputSchema(renderer);
@@ -116,11 +82,7 @@ export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
         model,
         max_tokens: 4096,
         system: [
-          {
-            type: 'text',
-            text: system,
-            cache_control: { type: 'ephemeral' },
-          },
+          { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
         ],
         tools: [
           {
@@ -176,38 +138,4 @@ export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
     error: `planFromNL failed after ${maxRetries} attempts: ${lastErr ?? 'unknown'}`,
     attempts: maxRetries,
   };
-}
-
-interface SdkErrorShape {
-  status?: number;
-  error?: { error?: { type?: string; message?: string } };
-  message?: string;
-}
-
-export function friendlyApiError(err: unknown): string {
-  const e = err as SdkErrorShape;
-  const status = typeof e.status === 'number' ? e.status : undefined;
-  const apiMsg = e.error?.error?.message;
-  const apiType = e.error?.error?.type;
-  const lowMsg = (apiMsg ?? '').toLowerCase();
-
-  if (status === 401) {
-    return 'Anthropic API key rejected (401). Verify the key with: terpix config show. Replace via: terpix config set anthropic_api_key sk-ant-...';
-  }
-  if (status === 400 && (lowMsg.includes('credit balance') || lowMsg.includes('billing'))) {
-    return 'Anthropic credit balance too low. Top up at https://console.anthropic.com/settings/billing or use a different key (terpix config set anthropic_api_key ...).';
-  }
-  if (status === 429) {
-    return 'Anthropic API rate-limited (429). Wait a moment and try again, or switch model with --model.';
-  }
-  if (status === 529) {
-    return 'Anthropic API overloaded (529). Retry shortly.';
-  }
-  if (status && apiMsg) {
-    return `Anthropic API error ${status} (${apiType ?? 'unknown'}): ${apiMsg}`;
-  }
-  if (status) {
-    return `Anthropic API error ${status}`;
-  }
-  return `LLM call failed: ${e.message ?? String(err)}`;
 }

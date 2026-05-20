@@ -198,7 +198,7 @@ async function setupWizard(): Promise<void> {
   console.log('Which LLM provider?');
   console.log('  [1] anthropic   (Claude 3.5 Sonnet, etc.)');
   console.log('  [2] openai      (GPT-4o, etc.)');
-  console.log('  [3] minimax     (abab6.5s-chat, etc.)');
+  console.log('  [3] minimax     (MiniMax-M2.7, etc.)');
   console.log('  [4] openai-compat (self-hosted / proxied)');
 
   let providerNum: string;
@@ -252,7 +252,7 @@ async function setupWizard(): Promise<void> {
   const PROVIDER_DEFAULT_MODELS: Record<ProviderNameT, string> = {
     anthropic: 'claude-sonnet-4-6',
     openai: 'gpt-4o',
-    minimax: 'abab6.5s-chat',
+    minimax: 'MiniMax-M2.7',
     'openai-compat': 'gpt-4o',
   };
   const defaultModel = PROVIDER_DEFAULT_MODELS[provider];

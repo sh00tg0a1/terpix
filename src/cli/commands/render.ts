@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { composite } from '../../core/compositor.js';
 import { loadPlanFromFile } from '../../core/plan-loader.js';
 import { FfmpegMp4Encoder } from '../../adapters/ffmpeg/encoder.js';
-import { planFromNL, hasAnthropicApiKey } from '../../adapters/llm/anthropic.js';
+import { planFromNL, hasLLMKey } from '../../adapters/llm/provider.js';
 import { parseDurationMs } from './plan.js';
 import { StylePresetName, type ScenePlanT } from '../../core/dsl.js';
 
@@ -55,11 +55,11 @@ async function loadOrPlan(opts: RenderOpts): Promise<ScenePlanT> {
     }
     return r.plan;
   }
-  if (!hasAnthropicApiKey()) {
+  if (!hasLLMKey()) {
     console.error(
-      "terpix render: input is not a .json plan, and no Anthropic API key found.\n" +
-        "  Set one with: terpix config set anthropic_api_key sk-ant-...\n" +
-        "  Or export ANTHROPIC_API_KEY in your shell.",
+      "terpix render: input is not a .json plan, and no LLM API key is configured.\n" +
+        "  Run: terpix config show       (to see provider + key state)\n" +
+        "  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | openai_compat)",
     );
     process.exit(2);
   }

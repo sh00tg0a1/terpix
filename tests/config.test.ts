@@ -229,7 +229,7 @@ describe('config', () => {
   it('getDefaultModel: returns provider-specific defaults', () => {
     expect(getDefaultModel('anthropic')).toBe('claude-sonnet-4-6');
     expect(getDefaultModel('openai')).toBe('gpt-4o');
-    expect(getDefaultModel('minimax')).toBe('abab6.5s-chat');
+    expect(getDefaultModel('minimax')).toBe('MiniMax-M2.7');
     expect(getDefaultModel('openai-compat')).toBe('gpt-4o');
   });
 

@@ -3,6 +3,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ScenePlan, type ScenePlanT } from '../../core/dsl.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
+import { getAnthropicApiKey, getDefaultModel } from '../../core/config.js';
 
 export interface PlanReq {
   prompt: string;
@@ -32,7 +33,9 @@ export interface PlanErr {
   attempts: number;
 }
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+export function hasAnthropicApiKey(): boolean {
+  return !!getAnthropicApiKey();
+}
 
 // Inject the current asset registry into the JSON Schema so the tool input
 // is constrained at the API level. We patch the sprite layer's `asset`
@@ -70,10 +73,19 @@ function patchSpriteAssetEnum(node: unknown, names: string[]): void {
 }
 
 export async function planFromNL(req: PlanReq): Promise<PlanOk | PlanErr> {
-  const model = req.model ?? DEFAULT_MODEL;
+  const model = req.model ?? getDefaultModel();
   const renderer = req.renderer ?? 'half';
   const maxRetries = req.maxRetries ?? 3;
-  const client = req.client ?? new Anthropic();
+  const key = getAnthropicApiKey();
+  if (!req.client && !key) {
+    return {
+      ok: false,
+      error:
+        'no Anthropic API key. Set ANTHROPIC_API_KEY env, or run `terpix config set anthropic_api_key sk-ant-...`',
+      attempts: 0,
+    };
+  }
+  const client = req.client ?? new Anthropic(key ? { apiKey: key } : {});
 
   const system = buildSystemPrompt({ renderer });
   const inputSchema = buildInputSchema(renderer);

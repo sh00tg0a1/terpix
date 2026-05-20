@@ -5,6 +5,7 @@ import { renderPlan } from './commands/render-plan.js';
 import { render as renderToFile } from './commands/render.js';
 import { validatePlan } from './commands/validate-plan.js';
 import { parseDurationMs, planCmd } from './commands/plan.js';
+import { configCmd } from './commands/config-cmd.js';
 import { registerBuiltins } from '../core/assets/builtin/index.js';
 import { listAssets } from '../core/assets/registry.js';
 import { loadUserAssets } from '../core/assets/loader.js';
@@ -159,6 +160,25 @@ program
   .action(async () => {
     const { probeCaps } = await import('../adapters/terminal/driver.js');
     console.log(JSON.stringify(probeCaps(), null, 2));
+  });
+
+program
+  .command('config')
+  .description('Manage ~/.config/terpix/config.json (API key, default model, default style/renderer)')
+  .argument('<subcommand>', 'show | get <key> | set <key> [value] | unset <key> | path')
+  .argument('[key]', 'config key (anthropic_api_key | default_model | default_style | default_renderer)')
+  .argument('[value]', 'value (omit for `set` to prompt with hidden input on a TTY)')
+  .action(async (subcommand: string, key?: string, value?: string) => {
+    const sub = subcommand as 'show' | 'get' | 'set' | 'unset' | 'path';
+    if (!['show', 'get', 'set', 'unset', 'path'].includes(sub)) {
+      console.error(`terpix config: unknown subcommand '${subcommand}'. Try: show | get | set | unset | path`);
+      process.exit(1);
+    }
+    await configCmd({
+      subcommand: sub,
+      ...(key ? { key } : {}),
+      ...(value !== undefined ? { value } : {}),
+    });
   });
 
 program

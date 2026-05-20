@@ -127,18 +127,13 @@ function drawTextLayer(
     const baseY = buf.h - t * (buf.h + shown.length * px);
     drawTextBlock(buf, shown, layer.position.x * buf.w, baseY, px, color, alpha, true);
   } else {
-    // Treat position as the text-center anchor: a long word at x=0.5 should
-    // straddle the middle, not start at the middle and run off the right edge.
-    drawTextBlock(
-      buf,
-      shown,
-      layer.position.x * buf.w,
-      layer.position.y * buf.h,
-      px,
-      color,
-      alpha,
-      true,
-    );
+    // position.y is the VERTICAL CENTER of the whole text block. Multi-line
+    // strings stay symmetric around the anchor instead of overflowing
+    // downward off-screen when the block is tall.
+    const lineCount = shown.split('\n').length;
+    const blockH = (lineCount - 1) * 8 * px + 7 * px;
+    const topY = layer.position.y * buf.h - blockH / 2;
+    drawTextBlock(buf, shown, layer.position.x * buf.w, topY, px, color, alpha, true);
   }
 }
 

@@ -37,7 +37,7 @@
           "style": "static",
           "color": "#ffd633",
           "size": "lg",
-          "position": { "x": 0.5, "y": 0.35 }
+          "position": { "x": 0.5, "y": 0.5 }
         }
       ]
     },

@@ -3,6 +3,7 @@ import { play } from './commands/play.js';
 import { demo } from './commands/demo.js';
 import { renderPlan } from './commands/render-plan.js';
 import { validatePlan } from './commands/validate-plan.js';
+import { parseDurationMs, planCmd } from './commands/plan.js';
 import { registerBuiltins } from '../core/assets/builtin/index.js';
 import { listAssets } from '../core/assets/registry.js';
 import { loadUserAssets } from '../core/assets/loader.js';
@@ -56,6 +57,33 @@ program
       path,
       ...(opts.style ? { style: opts.style } : {}),
       ...(opts.renderer ? { renderer: opts.renderer } : {}),
+    });
+  });
+
+program
+  .command('plan')
+  .description('Generate a JSON scene plan from a natural-language prompt via Claude')
+  .argument('<prompt>', 'natural-language description of the scene')
+  .option('--duration <t>', 'total duration (e.g. 15s, 1m30s, 500ms)', '15s')
+  .option('-o, --out <path>', 'output file (default stdout); "-" also = stdout')
+  .option('--model <id>', 'Anthropic model id', 'claude-sonnet-4-6')
+  .option('--renderer <name>', 'half | ascii', 'half')
+  .option('--style <name>', 'default | starwars | minimalist | silhouette | noir')
+  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string }) => {
+    let durationMs: number;
+    try {
+      durationMs = parseDurationMs(opts.duration);
+    } catch (err) {
+      console.error(`terpix plan: ${(err as Error).message}`);
+      process.exit(1);
+    }
+    await planCmd({
+      prompt,
+      durationMs,
+      ...(opts.out ? { out: opts.out } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.renderer === 'ascii' ? { renderer: 'ascii' as const } : { renderer: 'half' as const }),
+      ...(opts.style ? { style: opts.style } : {}),
     });
   });
 

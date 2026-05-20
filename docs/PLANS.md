@@ -30,11 +30,12 @@ defining experience of terpix and must be exercised by every path.
 - `asset-catalog.ts` derives the LLM enum and markdown from the registry.
 - No user formats yet — just the skeleton so user assets can land in 3.5 without further refactor.
 
-### 3.2 — LLM planner
+### 3.2 — LLM planner ✅
 - Anthropic SDK + `tool_use` + zod-to-json-schema; `cache_control: ephemeral` on system prompt.
-- `terpix plan "<prompt>"` and `terpix play "<prompt>"` (NL inline).
-- Retry up to 3 with appended zod error.
-- Plan output cached on disk.
+- `terpix plan "<prompt>" -o plan.json` ships; sprite enum in the tool's input_schema is rebuilt per-call from `ASSET_REGISTRY` so user-added shape-json assets are immediately offered to the LLM.
+- Retry up to 3 with appended zod error; LLM tool-omission also retried.
+- 10-test mock suite covers happy path, validation retry, tool-omission retry, exhaustion, and usage-token aggregation.
+- `terpix play "<prompt>"` (NL inline → plan + render) is the next small wire-up.
 - See [design-docs/llm-integration.md](design-docs/llm-integration.md).
 
 ### 3.5 — User assets (shape-json) ✅

@@ -299,9 +299,9 @@ export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
     }
   }
 
-  // Text-vs-subject overlap: if a text layer is centered close to a main
-  // sprite anchor, it will visually collide. Heuristic: y within 0.1 of
-  // a main subject's y AND text size != sm.
+  // Text-vs-subject overlap: a text layer collides with a sprite only when
+  // their bounding boxes overlap in BOTH y and x. (A centered title above
+  // edge-placed subjects shares no x-extent, so it does not collide.)
   for (const shot of plan.shots) {
     const textLayers = shot.layers.filter((l) => l.type === 'text') as Array<
       Extract<LayerT, { type: 'text' }>
@@ -310,20 +310,28 @@ export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
       Extract<LayerT, { type: 'sprite' }>
     >;
     for (const text of textLayers) {
+      // Half-extents as fraction of frame. Text height ≈ SIZE_FRAC; width ≈
+      // chars × ~3% (rough, capped at full width). Sprite from metrics.
+      const textHalfH = ({ sm: 0.05, md: 0.1, lg: 0.16 }[text.size]) + 0.02;
+      const textHalfW = Math.min(0.46, text.content.length * 0.018);
       for (const sp of spriteLayersInShot) {
         const spY = sp.keyframes[0]?.y;
-        if (spY === undefined) continue;
+        const spX = sp.keyframes[0]?.x;
+        if (spY === undefined || spX === undefined) continue;
         const spScale = maxScale(sp);
         if (spScale < 0.8) continue;
-        const dy = Math.abs(text.position.y - spY);
-        const sizeBand = { sm: 0.05, md: 0.1, lg: 0.16 }[text.size];
-        if (dy < sizeBand + 0.05) {
+        const aspect = getAsset(sp.asset)?.metrics?.aspect ?? 1;
+        const spHalfH = 0.1 * spScale * Math.max(1 / aspect, 1);
+        const spHalfW = 0.055 * spScale * Math.max(aspect, 1);
+        const overlapY = Math.abs(text.position.y - spY) < textHalfH + spHalfH;
+        const overlapX = Math.abs(text.position.x - spX) < textHalfW + spHalfW;
+        if (overlapY && overlapX) {
           issues.push({
             rule: 'text-collision',
             detail:
-              `text "${text.content.slice(0, 20)}" at y=${text.position.y} ` +
-              `overlaps sprite "${sp.asset}" at y=${spY}. Move text to a ` +
-              `clear band (e.g. y=0.1 for top title, y=0.92 for sm subtitle).`,
+              `text "${text.content.slice(0, 20)}" at (${text.position.x},` +
+              `${text.position.y}) overlaps sprite "${sp.asset}" at (${spX},` +
+              `${spY}). Move text to a clear band (y=0.1 top, y=0.92 bottom).`,
           });
           break;
         }

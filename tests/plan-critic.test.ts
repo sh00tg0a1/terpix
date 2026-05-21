@@ -93,6 +93,24 @@ describe('critiquePlan', () => {
     expect(rules('two people', p)).not.toContain('text-collision');
   });
 
+  it('flags undersized people next to a table (human-scale)', () => {
+    const p = plan([
+      sprite('table', 0.5, 0.78, 3),
+      sprite('human', 0.25, 0.6, 1.2),
+      sprite('human', 0.75, 0.6, 1.2),
+    ]);
+    expect(rules('two people at a table', p)).toContain('human-scale');
+  });
+
+  it('does not flag people scaled to human proportions', () => {
+    const p = plan([
+      sprite('table', 0.5, 0.78, 3),
+      sprite('human', 0.25, 0.55, 2.6),
+      sprite('human', 0.75, 0.55, 2.6),
+    ]);
+    expect(rules('two people at a table', p)).not.toContain('human-scale');
+  });
+
   it('flags minimalist style on an indoor prompt (style-mismatch)', () => {
     const layers = [0.2, 0.4, 0.6, 0.8, 0.5].map((x) => sprite('bowl', x, 0.75, 1.0));
     expect(rules('一桌子菜', plan(layers, 'minimalist'))).toContain('style-mismatch');

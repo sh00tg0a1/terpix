@@ -178,6 +178,32 @@ export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
     }
   }
 
+  // Human proportion: `human` is a tall sprite (aspect ~0.45), so its
+  // rendered HEIGHT = size = scale × 0.20 × min(canvas). At scale 1.0 that
+  // is only ~20% of the frame — knee-high. When a person shares the scene
+  // with a large prop (table, or any sprite at scale ≥ 2), they look like
+  // dolls unless scaled up. Require human scale ≥ ~2 in that case.
+  const humans = sprites.filter((s) => s.asset === 'human');
+  if (humans.length > 0) {
+    const bigProp = sprites.some(
+      (s) => s.asset !== 'human' && (s.asset === 'table' || maxScale(s) >= 2),
+    );
+    if (bigProp) {
+      const small = humans.filter((h) => maxScale(h) < 1.8);
+      if (small.length > 0) {
+        const scales = small.map((h) => maxScale(h)).join(', ');
+        issues.push({
+          rule: 'human-scale',
+          detail:
+            `the scene has a large prop (table or scale≥2 sprite) but ${small.length} ` +
+            `human sprite(s) are at scale ${scales}. \`human\` is a TALL sprite — ` +
+            `at scale 1 it is only ~20% of frame height. Raise people to scale ` +
+            `~2.5–3 so they read at human proportions beside the furniture.`,
+        });
+      }
+    }
+  }
+
   // Frame coverage: if total scaled width-fraction (rough) of all sprites is
   // < 0.3, the scene reads as empty. Approximate width per sprite as
   // 0.11 × scale × max(aspect, 1).

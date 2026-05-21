@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ScenePlan, type ScenePlanT } from '../../core/dsl.js';
+import { ScenePlan } from '../../core/dsl.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
@@ -121,12 +121,21 @@ export async function planFromNLOpenAICompat(
         .join('; ');
       continue;
     }
+    // Blind heuristic and vision critics are COMPLEMENTARY and run together:
+    // blind catches countable/structural misses, vision catches perceptual
+    // ones. Critically, vision must NOT be gated behind a blind pass — a
+    // never-satisfiable blind rule would otherwise burn the whole retry
+    // budget and the vision critic would never run. We gather both, merge the
+    // complaints, and retry once with the union.
     const critique = critiquePlan(req.prompt, parsed.data);
-    if (!critique.ok && attempt < maxRetries) {
-      lastErr =
-        `the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`;
-      continue;
+    const complaints: string[] = [];
+    if (!critique.ok) {
+      complaints.push(
+        `the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`,
+      );
     }
+    // Spend at most `vision.rounds` vision calls total; decrement whenever a
+    // call actually completes, regardless of the blind verdict.
     if (req.vision && (req.vision.rounds ?? 1) > 0 && attempt < maxRetries) {
       const vc = await visionCritiquePlan(req.prompt, parsed.data, {
         apiKey: req.vision.apiKey,
@@ -135,13 +144,19 @@ export async function planFromNLOpenAICompat(
       });
       if ('error' in vc) {
         process.stderr.write(`terpix plan: vision critic skipped: ${vc.error}\n`);
-      } else if (!vc.ok) {
-        lastErr =
-          `a vision review of the rendered preview frame flagged these ` +
-          `issues:\n${formatVisionIssuesForRetry(vc)}`;
+      } else {
         req.vision = { ...req.vision, rounds: (req.vision.rounds ?? 1) - 1 };
-        continue;
+        if (!vc.ok) {
+          complaints.push(
+            `a vision review of the rendered preview frame flagged these ` +
+              `issues:\n${formatVisionIssuesForRetry(vc)}`,
+          );
+        }
       }
+    }
+    if (complaints.length > 0 && attempt < maxRetries) {
+      lastErr = complaints.join('\n\n');
+      continue;
     }
     return {
       ok: true,

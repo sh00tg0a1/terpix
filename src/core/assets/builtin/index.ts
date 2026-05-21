@@ -7,6 +7,7 @@ import { drawMountain } from './mountain.js';
 import { drawTree } from './tree.js';
 import { drawSuperman } from './superman.js';
 import { drawHuman } from './human.js';
+import { drawTable } from './table.js';
 import { drawStarAscii, drawDroidAscii, drawHumanAscii } from './ascii-art.js';
 
 export function registerBuiltins(): void {
@@ -78,5 +79,12 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.0, anchor: 'center' },
     draw: drawSuperman,
+  });
+  registerAsset({
+    name: 'table',
+    description: 'a simple side-on table: flat top surface on two legs (use for dining / interior scenes; rest food sprites just above its top)',
+    source: 'builtin',
+    metrics: { aspect: 2.0, anchor: 'bottom' },
+    draw: drawTable,
   });
 }

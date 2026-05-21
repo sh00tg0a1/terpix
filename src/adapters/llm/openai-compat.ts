@@ -37,7 +37,7 @@ export async function planFromNLOpenAICompat(
       ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
     });
 
-  const system = buildSystemPrompt({ renderer });
+  const system = buildSystemPrompt({ renderer, prompt: req.prompt });
   const schema = zodToJsonSchema(ScenePlan, { target: 'openApi3' }) as Record<string, unknown>;
   patchSpriteAssetEnum(schema, spriteEnumForSchema({ renderer }));
 

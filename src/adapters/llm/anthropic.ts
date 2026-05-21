@@ -55,7 +55,7 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
   const maxRetries = req.maxRetries ?? (req.vision ? 5 : 3);
   const client = req.client ?? new Anthropic({ apiKey: cfg.apiKey });
 
-  const system = buildSystemPrompt({ renderer });
+  const system = buildSystemPrompt({ renderer, prompt: req.prompt });
   const inputSchema = buildInputSchema(renderer);
 
   const sizeHint = req.size ? ` Target canvas: ${req.size.w}x${req.size.h} cells.` : '';

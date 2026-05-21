@@ -39,8 +39,11 @@ const QUANTIFIERS: CountWord[] = [
   { pattern: /\b(four|4)\b|四个|四/, count: 4 },
   { pattern: /\b(five|5)\b|五个|五/, count: 5 },
   {
+    // Crowd words. NOTE: only `一桌` (a table-FULL of) counts as a crowd —
+    // bare `桌` is furniture and used to false-fire on `木桌`, inflating an
+    // unrelated noun ("木桌上的一只猫" → 5 cats). Keep `一桌`, drop bare `桌`.
     pattern:
-      /\b(many|several|crowd|group|flock|fleet|forest|bunch|row of|pile of|lots of|set of)\b|桌|群|众|排|堆|一桌|一片|一群|一排/i,
+      /\b(many|several|crowd|group|flock|fleet|forest|bunch|row of|pile of|lots of|set of)\b|群|众|排|堆|一桌|一片|一群|一排/i,
     count: 5,
   },
 ];

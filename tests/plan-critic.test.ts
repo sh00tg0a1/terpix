@@ -62,6 +62,13 @@ describe('critiquePlan', () => {
     expect(rules('一桌子菜', plan([scatter]))).not.toContain('coverage');
   });
 
+  it('does not let furniture 桌 inflate an unrelated count (coverage)', () => {
+    // bare 桌 used to match the crowd quantifier, so "木桌上的一只猫" demanded
+    // 5 cats and a single-cat plan failed coverage. Only 一桌 is a crowd.
+    const p = plan([sprite('cat', 0.5, 0.7, 1.0)]);
+    expect(rules('木桌上的一只猫', p)).not.toContain('coverage');
+  });
+
   it('flags cat used for people (wrong-substitute)', () => {
     const p = plan([sprite('cat', 0.3, 0.7, 1.0), sprite('cat', 0.7, 0.7, 1.0)]);
     expect(rules('两个人', p)).toContain('wrong-substitute');

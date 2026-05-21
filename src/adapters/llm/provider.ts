@@ -5,6 +5,7 @@ import {
   getOpenAIApiKey,
   getOpenAICompatConfig,
   getProvider,
+  getQwenApiKey,
   type ProviderNameT,
 } from '../../core/config.js';
 import { planFromNLAnthropic } from './anthropic.js';
@@ -12,6 +13,7 @@ import { planFromNLOpenAICompat } from './openai-compat.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
 
 const MINIMAX_BASE_URL = 'https://api.minimax.io/v1';
+const QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 
 export interface ResolvedProvider {
   kind: ProviderNameT;
@@ -54,6 +56,16 @@ export function resolveProvider(overrideProvider?: ProviderNameT): ResolvedProvi
       }
       return { kind: provider, apiKey: k, baseURL: MINIMAX_BASE_URL, defaultModel };
     }
+    case 'qwen': {
+      const k = getQwenApiKey();
+      if (!k) {
+        return {
+          error:
+            'no Qwen API key. Set with: terpix config set qwen_api_key sk-... (or env QWEN_API_KEY / DASHSCOPE_API_KEY)',
+        };
+      }
+      return { kind: provider, apiKey: k, baseURL: QWEN_BASE_URL, defaultModel };
+    }
     case 'openai-compat': {
       const { key, baseURL } = getOpenAICompatConfig();
       if (!key || !baseURL) {
@@ -81,6 +93,7 @@ export async function planFromNL(req: PlanReq & { provider?: ProviderNameT }): P
       return planFromNLAnthropic(req, { apiKey: resolved.apiKey, defaultModel: resolved.defaultModel });
     case 'openai':
     case 'minimax':
+    case 'qwen':
     case 'openai-compat':
       return planFromNLOpenAICompat(req, {
         apiKey: resolved.apiKey,

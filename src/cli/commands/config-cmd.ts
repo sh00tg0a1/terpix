@@ -14,6 +14,7 @@ const KNOWN_KEYS = new Set<keyof ConfigT>([
   'anthropic_api_key',
   'openai_api_key',
   'minimax_api_key',
+  'qwen_api_key',
   'openai_compat_api_key',
   'openai_compat_base_url',
   'default_model',
@@ -63,6 +64,7 @@ function show(): void {
     'anthropic_api_key',
     'openai_api_key',
     'minimax_api_key',
+    'qwen_api_key',
     'openai_compat_api_key',
     'openai_compat_base_url',
   ];
@@ -88,6 +90,8 @@ function show(): void {
   console.log(`  ANTHROPIC_API_KEY = ${maskKey(process.env['ANTHROPIC_API_KEY'])}`);
   console.log(`  OPENAI_API_KEY = ${maskKey(process.env['OPENAI_API_KEY'])}`);
   console.log(`  MINIMAX_API_KEY = ${maskKey(process.env['MINIMAX_API_KEY'])}`);
+  console.log(`  QWEN_API_KEY = ${maskKey(process.env['QWEN_API_KEY'])}`);
+  console.log(`  DASHSCOPE_API_KEY = ${maskKey(process.env['DASHSCOPE_API_KEY'])}`);
   console.log(`  OPENAI_COMPAT_API_KEY = ${maskKey(process.env['OPENAI_COMPAT_API_KEY'])}`);
   console.log(`  OPENAI_COMPAT_BASE_URL = ${process.env['OPENAI_COMPAT_BASE_URL'] ?? '(unset)'}`);
   console.log(`  TERPIX_PROVIDER = ${process.env['TERPIX_PROVIDER'] ?? '(unset)'}`);
@@ -199,11 +203,12 @@ async function setupWizard(): Promise<void> {
   console.log('  [1] anthropic   (Claude 3.5 Sonnet, etc.)');
   console.log('  [2] openai      (GPT-4o, etc.)');
   console.log('  [3] minimax     (MiniMax-M2.7, etc.)');
-  console.log('  [4] openai-compat (self-hosted / proxied)');
+  console.log('  [4] qwen        (Alibaba DashScope: qwen-plus, qwen-max, qwen-turbo, etc.)');
+  console.log('  [5] openai-compat (self-hosted / proxied / any custom OpenAI-compatible endpoint)');
 
   let providerNum: string;
   try {
-    providerNum = await promptValueInternal('Enter choice [1-4]: ', false);
+    providerNum = await promptValueInternal('Enter choice [1-5]: ', false);
   } catch (err) {
     console.error('setup cancelled.');
     process.exit(1);
@@ -213,7 +218,8 @@ async function setupWizard(): Promise<void> {
     '1': 'anthropic',
     '2': 'openai',
     '3': 'minimax',
-    '4': 'openai-compat',
+    '4': 'qwen',
+    '5': 'openai-compat',
   };
 
   const provider = providerMap[providerNum];
@@ -253,6 +259,7 @@ async function setupWizard(): Promise<void> {
     anthropic: 'claude-sonnet-4-6',
     openai: 'gpt-4o',
     minimax: 'MiniMax-M2.7',
+    qwen: 'qwen-plus',
     'openai-compat': 'gpt-4o',
   };
   const defaultModel = PROVIDER_DEFAULT_MODELS[provider];

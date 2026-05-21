@@ -59,7 +59,7 @@ async function loadOrPlan(opts: RenderOpts): Promise<ScenePlanT> {
     console.error(
       "terpix render: input is not a .json plan, and no LLM API key is configured.\n" +
         "  Run: terpix config show       (to see provider + key state)\n" +
-        "  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | openai_compat)",
+        "  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | qwen | openai_compat)",
     );
     process.exit(2);
   }

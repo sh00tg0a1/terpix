@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
-export const ProviderName = z.enum(['anthropic', 'openai', 'minimax', 'openai-compat']);
+export const ProviderName = z.enum(['anthropic', 'openai', 'minimax', 'qwen', 'openai-compat']);
 export type ProviderNameT = z.infer<typeof ProviderName>;
 
 export const Config = z.object({
@@ -13,6 +13,7 @@ export const Config = z.object({
   anthropic_api_key: z.string().min(8).optional(),
   openai_api_key: z.string().min(8).optional(),
   minimax_api_key: z.string().min(8).optional(),
+  qwen_api_key: z.string().min(8).optional(),
   // For self-hosted / proxied OpenAI-compatible deployments.
   openai_compat_api_key: z.string().min(8).optional(),
   openai_compat_base_url: z.string().url().optional(),
@@ -103,6 +104,12 @@ export function getMinimaxApiKey(): string | undefined {
   return readConfig().minimax_api_key;
 }
 
+export function getQwenApiKey(): string | undefined {
+  const env = process.env['QWEN_API_KEY'] ?? process.env['DASHSCOPE_API_KEY'];
+  if (env && env.length > 0) return env;
+  return readConfig().qwen_api_key;
+}
+
 export function getOpenAICompatConfig(): { key?: string; baseURL?: string } {
   const cfg = readConfig();
   return {
@@ -125,6 +132,7 @@ const PROVIDER_DEFAULT_MODELS: Record<ProviderNameT, string> = {
   anthropic: 'claude-sonnet-4-6',
   openai: 'gpt-4o',
   minimax: 'MiniMax-M2.7',
+  qwen: 'qwen-plus',
   'openai-compat': 'gpt-4o',
 };
 

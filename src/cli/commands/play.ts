@@ -88,7 +88,7 @@ async function playNL(prompt: string, opts: PlayOpts): Promise<void> {
     console.error(
       "terpix play: input '" + prompt + "' is not a video file, and no LLM API key is configured.\n" +
         "  Run: terpix config show       (to see provider + key state)\n" +
-        "  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | openai_compat)",
+        "  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | qwen | openai_compat)",
     );
     process.exit(2);
   }

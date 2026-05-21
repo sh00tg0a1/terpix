@@ -186,38 +186,86 @@ export function makeShapeDrawer(spec: ShapeAssetFileT): (ctx: DrawCtx) => void {
     const offX = ctx.cx - (viewBox.w * scale) / 2;
     const offY = ctx.cy - (viewBox.h * scale) / 2;
     const alpha = Math.round(255 * (ctx.opacity ?? 1));
-    const project = (px: number, py: number): [number, number] => [offX + px * scale, offY + py * scale];
-    for (const prim of primitives) drawPrimitive(ctx, prim, project, scale, ctx.color, alpha);
+    // `rotation` is in degrees, clockwise, about the sprite center (cx, cy).
+    const rot = ((ctx.rotation ?? 0) * Math.PI) / 180;
+    const rotating = rot !== 0;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    // viewBox point → screen, with optional rotation about the center.
+    const tf = (px: number, py: number): [number, number] => {
+      const sx = offX + px * scale;
+      const sy = offY + py * scale;
+      if (!rotating) return [sx, sy];
+      const dx = sx - ctx.cx;
+      const dy = sy - ctx.cy;
+      return [ctx.cx + dx * cos - dy * sin, ctx.cy + dx * sin + dy * cos];
+    };
+    for (const prim of primitives) drawPrimitive(ctx, prim, tf, scale, rotating, ctx.color, alpha);
   };
+}
+
+// Sample an axis-aligned ellipse (viewBox coords) as an N-gon so it can be
+// rotated and filled as a polygon.
+function ellipsePolygon(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  tf: (x: number, y: number) => [number, number],
+  n = 24,
+): Array<[number, number]> {
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push(tf(cx + rx * Math.cos(a), cy + ry * Math.sin(a)));
+  }
+  return pts;
 }
 
 function drawPrimitive(
   ctx: DrawCtx,
   prim: PrimitiveT,
-  project: (x: number, y: number) => [number, number],
+  tf: (x: number, y: number) => [number, number],
   scale: number,
+  rotating: boolean,
   main: [number, number, number],
   alpha: number,
 ): void {
   const color = resolveColor(prim.color, main);
   switch (prim.kind) {
     case 'rect': {
-      const [x, y] = project(prim.x, prim.y);
-      fillRect(ctx.buf, x, y, prim.w * scale, prim.h * scale, color.r, color.g, color.b, alpha);
+      if (rotating) {
+        // Axis-aligned fill can't rotate; emit the 4 corners as a polygon.
+        const corners: Array<[number, number]> = [
+          tf(prim.x, prim.y),
+          tf(prim.x + prim.w, prim.y),
+          tf(prim.x + prim.w, prim.y + prim.h),
+          tf(prim.x, prim.y + prim.h),
+        ];
+        drawPolygonScanline(ctx, corners, color, alpha);
+      } else {
+        const [x, y] = tf(prim.x, prim.y);
+        fillRect(ctx.buf, x, y, prim.w * scale, prim.h * scale, color.r, color.g, color.b, alpha);
+      }
       return;
     }
     case 'circle': {
-      const [cx, cy] = project(prim.cx, prim.cy);
+      // A circle is rotation-invariant: just move its center.
+      const [cx, cy] = tf(prim.cx, prim.cy);
       fillCircle(ctx.buf, cx, cy, prim.r * scale, color.r, color.g, color.b, alpha);
       return;
     }
     case 'ellipse': {
-      const [cx, cy] = project(prim.cx, prim.cy);
-      drawEllipseScanline(ctx, cx, cy, prim.rx * scale, prim.ry * scale, color, alpha);
+      if (rotating) {
+        drawPolygonScanline(ctx, ellipsePolygon(prim.cx, prim.cy, prim.rx, prim.ry, tf), color, alpha);
+      } else {
+        const [cx, cy] = tf(prim.cx, prim.cy);
+        drawEllipseScanline(ctx, cx, cy, prim.rx * scale, prim.ry * scale, color, alpha);
+      }
       return;
     }
     case 'triangle': {
-      const [p0, p1, p2] = prim.points.map(([x, y]) => project(x, y)) as [
+      const [p0, p1, p2] = prim.points.map(([x, y]) => tf(x, y)) as [
         [number, number],
         [number, number],
         [number, number],
@@ -230,13 +278,13 @@ function drawPrimitive(
       return;
     }
     case 'line': {
-      const [fx, fy] = project(prim.from[0], prim.from[1]);
-      const [tx, ty] = project(prim.to[0], prim.to[1]);
+      const [fx, fy] = tf(prim.from[0], prim.from[1]);
+      const [tx, ty] = tf(prim.to[0], prim.to[1]);
       drawBresenhamLine(ctx, fx, fy, tx, ty, prim.thickness, color, alpha);
       return;
     }
     case 'polygon': {
-      const pts = prim.points.map(([x, y]) => project(x, y)) as Array<[number, number]>;
+      const pts = prim.points.map(([x, y]) => tf(x, y)) as Array<[number, number]>;
       drawPolygonScanline(ctx, pts, color, alpha);
       return;
     }

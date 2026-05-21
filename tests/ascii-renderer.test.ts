@@ -154,6 +154,38 @@ describe('ascii renderer', () => {
     expect(dots).toBeGreaterThan(0);
   });
 
+  it('iso camera recedes a deep sprite up the char grid', async () => {
+    function topRow(frame: { chars: Uint16Array; w: number; h: number }): number {
+      for (let y = 0; y < frame.h; y++) {
+        for (let x = 0; x < frame.w; x++) {
+          if (frame.chars[y * frame.w + x] !== 0) return y;
+        }
+      }
+      return frame.h;
+    }
+    const make = (iso: boolean) =>
+      ScenePlan.parse({
+        ...basePlan,
+        ...(iso ? { camera: { projection: 'iso' as const, tilt: 0.6 } } : {}),
+        shots: [
+          {
+            ...basePlan.shots[0],
+            layers: [
+              { type: 'sprite' as const, asset: 'human', color: '#ffffff', ease: 'linear' as const,
+                keyframes: [{ tMs: 0, x: 0.5, y: 0.8, scale: 2, depth: iso ? 1 : 0 }] },
+            ],
+          },
+        ],
+      });
+    const grab = async (iso: boolean) => {
+      for await (const f of compositeAscii(make(iso), { w: 40, h: 24, fps: 12 })) return f;
+      throw new Error('no frame');
+    };
+    const flat = await grab(false);
+    const isoF = await grab(true);
+    expect(topRow(isoF)).toBeLessThan(topRow(flat)); // receded upward
+  });
+
   it('sprite layer without drawAscii throws helpful error', async () => {
     const badPlan = ScenePlan.parse({
       ...basePlan,

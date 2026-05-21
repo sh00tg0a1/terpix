@@ -122,6 +122,38 @@ describe('makeShapeDrawer', () => {
     }
     expect(greenPixels).toBeGreaterThan(0);
   });
+
+  it('rotation turns a tall bar into a wide one (rect → rotated polygon)', () => {
+    // A narrow, tall bar centered in a 100×100 viewBox.
+    const spec = {
+      name: 'bar',
+      description: 'a tall vertical bar',
+      viewBox: { w: 100, h: 100 },
+      primitives: [{ kind: 'rect' as const, x: 40, y: 10, w: 20, h: 80, color: '#ff0000' }],
+    };
+    const draw = makeShapeDrawer(spec);
+    function paintedExtent(rotation: number) {
+      const buf = createBuffer(100, 100);
+      draw({ buf, cx: 50, cy: 50, size: 100, color: [255, 0, 0], rotation });
+      let minX = 100, maxX = -1, minY = 100, maxY = -1;
+      for (let y = 0; y < 100; y++) {
+        for (let x = 0; x < 100; x++) {
+          const i = (y * 100 + x) * 4;
+          if (buf.rgba[i]! > 200 && buf.rgba[i + 1]! < 50 && buf.rgba[i + 2]! < 50) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      return { w: maxX - minX, h: maxY - minY };
+    }
+    const flat = paintedExtent(0);
+    const turned = paintedExtent(90);
+    expect(flat.h).toBeGreaterThan(flat.w); // upright: taller than wide
+    expect(turned.w).toBeGreaterThan(turned.h); // rotated 90°: wider than tall
+  });
 });
 
 describe('loadUserAssets', () => {

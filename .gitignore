@@ -6,7 +6,10 @@ coverage/
 *.log
 .DS_Store
 ~/.cache/terpix/
-terpix-assets/
+terpix-assets/*
+# ship the demo shape assets the examples + prompt reference
+!terpix-assets/bowl.json
+!terpix-assets/steam.json
 
 # local test outputs
 *.mp4

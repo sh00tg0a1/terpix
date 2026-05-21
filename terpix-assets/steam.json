@@ -1,0 +1,16 @@
+{
+  "name": "steam",
+  "description": "a soft rising plume of steam: overlapping pale ellipses forming a fluffy column",
+  "viewBox": { "w": 80, "h": 140 },
+  "primitives": [
+    { "kind": "ellipse", "cx": 40, "cy": 120, "rx": 22, "ry": 18, "color": "#f0f0f0" },
+    { "kind": "ellipse", "cx": 30, "cy": 108, "rx": 18, "ry": 16, "color": "#f4f4f4" },
+    { "kind": "ellipse", "cx": 48, "cy": 100, "rx": 20, "ry": 16, "color": "#ededed" },
+    { "kind": "ellipse", "cx": 36, "cy": 84,  "rx": 22, "ry": 18, "color": "#f0f0f0" },
+    { "kind": "ellipse", "cx": 50, "cy": 70,  "rx": 18, "ry": 16, "color": "#ececec" },
+    { "kind": "ellipse", "cx": 32, "cy": 56,  "rx": 20, "ry": 18, "color": "#e8e8e8" },
+    { "kind": "ellipse", "cx": 44, "cy": 40,  "rx": 18, "ry": 16, "color": "#e4e4e4" },
+    { "kind": "ellipse", "cx": 36, "cy": 24,  "rx": 14, "ry": 14, "color": "#e0e0e0" },
+    { "kind": "ellipse", "cx": 44, "cy": 12,  "rx": 10, "ry": 10, "color": "#dcdcdc" }
+  ]
+}

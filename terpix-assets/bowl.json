@@ -1,0 +1,25 @@
+{
+  "name": "bowl",
+  "description": "a steaming ramen bowl viewed from front: red bowl, golden broth surface, pile of noodles, egg half, scallions, foot rim",
+  "viewBox": { "w": 200, "h": 140 },
+  "anchor": "bottom",
+  "primitives": [
+    { "kind": "polygon", "points": [[10, 60], [190, 60], [150, 130], [50, 130]], "color": "#c43020" },
+    { "kind": "polygon", "points": [[18, 64], [182, 64], [148, 126], [52, 126]], "color": "#a82010" },
+    { "kind": "ellipse", "cx": 100, "cy": 60, "rx": 90, "ry": 11, "color": "#1a0a06" },
+    { "kind": "ellipse", "cx": 100, "cy": 60, "rx": 84, "ry": 8, "color": "#e09030" },
+    { "kind": "ellipse", "cx": 95, "cy": 47, "rx": 70, "ry": 4, "color": "#f5d870" },
+    { "kind": "ellipse", "cx": 110, "cy": 43, "rx": 60, "ry": 3, "color": "#fbe488" },
+    { "kind": "ellipse", "cx": 90, "cy": 39, "rx": 55, "ry": 3, "color": "#f5d870" },
+    { "kind": "ellipse", "cx": 105, "cy": 35, "rx": 48, "ry": 3, "color": "#fbe488" },
+    { "kind": "ellipse", "cx": 95, "cy": 31, "rx": 40, "ry": 2, "color": "#f5d870" },
+    { "kind": "circle",  "cx": 65, "cy": 48, "r": 11, "color": "#fbf4e0" },
+    { "kind": "circle",  "cx": 65, "cy": 48, "r": 6, "color": "#ffc040" },
+    { "kind": "rect", "x": 128, "y": 42, "w": 5, "h": 2, "color": "#6fae3a" },
+    { "kind": "rect", "x": 138, "y": 39, "w": 6, "h": 2, "color": "#7fbe48" },
+    { "kind": "rect", "x": 118, "y": 36, "w": 4, "h": 2, "color": "#6fae3a" },
+    { "kind": "rect", "x": 146, "y": 45, "w": 4, "h": 2, "color": "#7fbe48" },
+    { "kind": "rect", "x": 80, "y": 32, "w": 4, "h": 2, "color": "#6fae3a" },
+    { "kind": "ellipse", "cx": 100, "cy": 130, "rx": 36, "ry": 5, "color": "#7a1808" }
+  ]
+}

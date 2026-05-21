@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import { fillCircle, fillRect, fillTriangle, setPixel } from '../../pixel.js';
 import { setCell } from '../../char-grid.js';
+import { shade } from '../../color.js';
 import type { AsciiDrawCtx, DrawCtx } from '../registry.js';
 
-const HexOrPlaceholder = z.string().regex(/^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})|@main)$/);
+// `@main` = the layer color; the tone tokens derive shadow/highlight variants
+// from it so a shape sprite reads with volume but still recolors as a whole
+// when the plan changes layer.color.
+const HexOrPlaceholder = z
+  .string()
+  .regex(/^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})|@main|@light|@lighter|@dark|@darker)$/);
 const Point = z.tuple([z.number(), z.number()]);
 
 const Rect = z.object({
@@ -87,8 +93,20 @@ function hexToRgb(hex: string): RGB {
   return { r: r * 17, g: g * 17, b: b * 17 };
 }
 
+const TONE_FACTOR: Record<string, number> = {
+  '@lighter': 1.5,
+  '@light': 1.25,
+  '@dark': 0.62,
+  '@darker': 0.42,
+};
+
 function resolveColor(token: string, main: [number, number, number]): RGB {
   if (token === '@main') return { r: main[0], g: main[1], b: main[2] };
+  const f = TONE_FACTOR[token];
+  if (f !== undefined) {
+    const [r, g, b] = shade(main, f);
+    return { r, g, b };
+  }
   return hexToRgb(token);
 }
 

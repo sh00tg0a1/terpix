@@ -48,7 +48,8 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
       const shotTMs = Math.round((f * 1000) / fps);
       const buf = createBuffer(w, h);
       paintBackground(buf, effectiveBackground, shotTMs);
-      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot, camera);
+      const geoms = resolveSpriteGeoms(shot.layers, buf, camera, shotTMs);
+      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot, camera, geoms);
       applyStyle(buf, style);
       yield { w, h, ptsMs: baseMs + shotTMs, rgba: buf.rgba };
     }
@@ -56,10 +57,17 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
   }
 }
 
-function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT, camera: CameraT): void {
+function drawLayer(
+  buf: PixelBuffer,
+  layer: LayerT,
+  tMs: number,
+  shot: ShotT,
+  camera: CameraT,
+  geoms: Map<LayerT, SpriteGeom>,
+): void {
   switch (layer.type) {
     case 'sprite':
-      drawSpriteLayer(buf, layer, tMs, camera);
+      drawSpriteLayer(buf, layer, geoms.get(layer));
       return;
     case 'text':
       drawTextLayer(buf, layer, tMs, shot.durationMs);
@@ -151,30 +159,135 @@ function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteS
   };
 }
 
-function drawSpriteLayer(
-  buf: PixelBuffer,
-  layer: Extract<LayerT, { type: 'sprite' }>,
-  tMs: number,
-  camera: CameraT,
-): void {
-  const state = interpolate(layer.keyframes, tMs, layer.ease);
-  const cx = state.x * buf.w;
-  const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
-  const color = hexToRgb(layer.color ?? '#cccccc');
-  const entry = getAsset(layer.asset);
+type SpriteLayer = Extract<LayerT, { type: 'sprite' }>;
+
+interface SpriteGeom {
+  cx: number;
+  cy: number;
+  size: number;
+  opacity: number;
+  rotation: number;
+}
+
+function requireAsset(name: string) {
+  const entry = getAsset(name);
   if (!entry) {
-    const hint = findNearestName(layer.asset);
+    const hint = findNearestName(name);
     throw new Error(
-      `unknown sprite asset '${layer.asset}'` +
+      `unknown sprite asset '${name}'` +
         (hint ? ` (did you mean '${hint}'?)` : '') +
         '. Run `terpix asset list` to see registered names.',
     );
   }
-  const proj =
-    camera.projection === 'iso'
-      ? projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h)
-      : { cy: state.y * buf.h, size: baseSize, opacity: state.opacity };
-  entry.draw({ buf, cx, cy: proj.cy, size: proj.size, color, rotation: state.rotation, opacity: proj.opacity });
+  return entry;
+}
+
+// A sprite's own geometry from its keyframes (before any relational placement).
+function baseSpriteGeom(layer: SpriteLayer, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
+  const state = interpolate(layer.keyframes, tMs, layer.ease);
+  const cx = state.x * buf.w;
+  const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
+  if (camera.projection === 'iso') {
+    const p = projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h);
+    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation: state.rotation };
+  }
+  return { cx, cy: state.y * buf.h, size: baseSize, opacity: state.opacity, rotation: state.rotation };
+}
+
+// Where a sprite "sits" within its own bbox, used as the contact point when it
+// is placed ON something. Falls back to the bottom (for ground-resting assets)
+// or the center.
+function attachPoint(asset: string): [number, number] {
+  const m = getAsset(asset)?.metrics;
+  return m?.points?.base ?? (m?.anchor === 'bottom' ? [0.5, 0.9] : [0.5, 0.5]);
+}
+
+// Resolve a sprite that declares `on`: land its attach point on the target's
+// named point. With `depth`, interpolate across the target's surfaceFront →
+// surfaceBack and shrink with distance so items recede on the surface.
+function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
+  const childBase = baseSpriteGeom(layer, buf, camera, tMs);
+  const on = layer.on!;
+  const tGeom = target.geom;
+  const tPts = getAsset(target.layer.asset)?.metrics?.points;
+
+  let px = 0.5;
+  let py = 0.5;
+  let sizeFactor = 1;
+  let xCompress = 1;
+  if (on.depth !== undefined && tPts?.surfaceFront && tPts?.surfaceBack) {
+    px = lerp(tPts.surfaceFront[0], tPts.surfaceBack[0], on.depth);
+    py = lerp(tPts.surfaceFront[1], tPts.surfaceBack[1], on.depth);
+    sizeFactor = lerp(1, 0.62, on.depth);
+    xCompress = lerp(1, 0.7, on.depth);
+  } else {
+    const p = tPts?.[on.at];
+    if (p) {
+      px = p[0];
+      py = p[1];
+    }
+  }
+
+  const fx = tGeom.cx + (px - 0.5) * tGeom.size + on.dx * tGeom.size * 0.5 * xCompress;
+  const fy = tGeom.cy + (py - 0.5) * tGeom.size + on.dy * tGeom.size;
+  const [ax, ay] = attachPoint(layer.asset);
+  const size = childBase.size * sizeFactor;
+  return {
+    cx: fx - (ax - 0.5) * size,
+    cy: fy - (ay - 0.5) * size,
+    size,
+    opacity: childBase.opacity,
+    rotation: childBase.rotation,
+  };
+}
+
+// Resolve geometry for every sprite layer, honoring relational placement.
+// Non-`on` sprites resolve directly; `on` sprites resolve from their target
+// (iteratively, so chains like steam→bowl→table settle).
+export function resolveSpriteGeoms(
+  layers: LayerT[],
+  buf: PixelBuffer,
+  camera: CameraT,
+  tMs: number,
+): Map<LayerT, SpriteGeom> {
+  const out = new Map<LayerT, SpriteGeom>();
+  const byId = new Map<string, { geom: SpriteGeom; layer: SpriteLayer }>();
+  let pending: SpriteLayer[] = [];
+  for (const layer of layers) {
+    if (layer.type !== 'sprite') continue;
+    if (layer.on) {
+      pending.push(layer);
+      continue;
+    }
+    const g = baseSpriteGeom(layer, buf, camera, tMs);
+    out.set(layer, g);
+    if (layer.id) byId.set(layer.id, { geom: g, layer });
+  }
+  for (let pass = 0; pass < 4 && pending.length > 0; pass++) {
+    const next: SpriteLayer[] = [];
+    for (const layer of pending) {
+      const target = byId.get(layer.on!.layer);
+      if (!target) {
+        next.push(layer);
+        continue;
+      }
+      const g = placeOnGeom(layer, target, buf, camera, tMs);
+      out.set(layer, g);
+      if (layer.id) byId.set(layer.id, { geom: g, layer });
+    }
+    if (next.length === pending.length) break; // no progress (missing/cyclic target)
+    pending = next;
+  }
+  // Unresolved `on` layers (bad/cyclic ref): fall back to their own keyframes.
+  for (const layer of pending) out.set(layer, baseSpriteGeom(layer, buf, camera, tMs));
+  return out;
+}
+
+function drawSpriteLayer(buf: PixelBuffer, layer: SpriteLayer, geom: SpriteGeom | undefined): void {
+  const entry = requireAsset(layer.asset);
+  const g = geom ?? { cx: buf.w / 2, cy: buf.h / 2, size: Math.min(buf.w, buf.h) * 0.2, opacity: 1, rotation: 0 };
+  const color = hexToRgb(layer.color ?? '#cccccc');
+  entry.draw({ buf, cx: g.cx, cy: g.cy, size: g.size, color, rotation: g.rotation, opacity: g.opacity });
 }
 
 // Target char-cell height as fraction of buffer height (glyph = 7 rows tall).

@@ -30,6 +30,11 @@ export interface AssetMetrics {
   // floating things (moon, planet, spaceship), 'bottom' for ground-resting
   // things (mountain, tree, bowl) — useful for picking y anchor.
   anchor: 'center' | 'bottom';
+  // Named attachment points in normalized bbox coords ([0,0] = top-left,
+  // [1,1] = bottom-right, [0.5,0.5] = center). Used by relational placement
+  // (`on`): e.g. a table exposes `surfaceFront`/`surfaceBack` so bowls can
+  // rest on its top, and a bottom-anchored sprite's `base` is where it sits.
+  points?: Record<string, [number, number]>;
 }
 
 export interface AssetEntry {

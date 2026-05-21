@@ -99,9 +99,14 @@ export function registerBuiltins(): void {
   });
   registerAsset({
     name: 'table',
-    description: 'a simple side-on table: flat top surface on two legs (use for dining / interior scenes; rest food sprites just above its top)',
+    description:
+      'a table in 3/4 perspective: a receding top surface on four legs. Use for dining / interior scenes and place food sprites ON it with `on: { layer: <table id>, at: "surface", depth }` — depth 0 = near/front, 1 = far/back.',
     source: 'builtin',
-    metrics: { aspect: 2.0, anchor: 'bottom' },
+    metrics: {
+      aspect: 2.0,
+      anchor: 'bottom',
+      points: { surface: [0.5, 0.43], surfaceBack: [0.5, 0.32], surfaceFront: [0.5, 0.54] },
+    },
     draw: drawTable,
     drawAscii: drawTableAscii,
   });

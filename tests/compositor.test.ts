@@ -185,4 +185,94 @@ describe('composite', () => {
     expect(valid.length).toBeGreaterThan(1);
     expect(valid[valid.length - 1]!).toBeGreaterThan(valid[0]!);
   });
+
+  it('scatter tiles `count` instances across the area x-span', async () => {
+    const p = plan({
+      shots: [
+        {
+          id: 's1',
+          durationMs: 100,
+          background: { type: 'solid', color: '#000000' },
+          layers: [
+            {
+              type: 'scatter',
+              asset: 'planet',
+              color: '#ff0000',
+              count: 4,
+              area: { x0: 0.1, y0: 0.5, x1: 0.9, y1: 0.5 },
+              scale: 0.5,
+              scaleJitter: 0,
+              seed: 1,
+            },
+          ],
+        },
+      ],
+    });
+    const [frame] = (await collect(composite(p, { w: 64, h: 16, fps: 10 }))) as Array<{
+      rgba: Uint8Array;
+      w: number;
+      h: number;
+    }>;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let red = 0;
+    for (let y = 0; y < frame!.h; y++) {
+      for (let x = 0; x < frame!.w; x++) {
+        const i = (y * frame!.w + x) * 4;
+        if (frame!.rgba[i]! > 100 && frame!.rgba[i + 1]! < 50 && frame!.rgba[i + 2]! < 50) {
+          red++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+        }
+      }
+    }
+    expect(red).toBeGreaterThan(0);
+    // Four instances tiled from x≈0.1→0.9 should span well over half the width.
+    expect(maxX - minX).toBeGreaterThan(frame!.w * 0.5);
+  });
+
+  it('iso camera makes a deep sprite recede (higher up + smaller)', async () => {
+    function redStats(rgba: Uint8Array, w: number, h: number) {
+      let sum = 0;
+      let n = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          if (rgba[i]! > 100 && rgba[i + 1]! < 50 && rgba[i + 2]! < 50) {
+            sum += y;
+            n++;
+          }
+        }
+      }
+      return { cy: n === 0 ? -1 : sum / n, count: n };
+    }
+    const layer = (depth: number) => ({
+      type: 'sprite' as const,
+      asset: 'planet',
+      color: '#ff0000',
+      keyframes: [{ tMs: 0, x: 0.5, y: 0.8, scale: 1, depth }],
+    });
+    const makePlan = (iso: boolean) =>
+      plan({
+        ...(iso ? { camera: { projection: 'iso' as const, tilt: 0.6 } } : {}),
+        shots: [
+          {
+            id: 's1',
+            durationMs: 100,
+            background: { type: 'solid', color: '#000000' },
+            layers: [layer(iso ? 1 : 0)],
+          },
+        ],
+      });
+    const [flat] = (await collect(composite(makePlan(false), { w: 32, h: 32, fps: 10 }))) as Array<{
+      rgba: Uint8Array; w: number; h: number;
+    }>;
+    const [iso] = (await collect(composite(makePlan(true), { w: 32, h: 32, fps: 10 }))) as Array<{
+      rgba: Uint8Array; w: number; h: number;
+    }>;
+    const fs = redStats(flat!.rgba, flat!.w, flat!.h);
+    const is = redStats(iso!.rgba, iso!.w, iso!.h);
+    expect(is.cy).toBeLessThan(fs.cy); // receded up the frame
+    expect(is.count).toBeLessThan(fs.count); // shrank
+  });
 });

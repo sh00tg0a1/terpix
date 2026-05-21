@@ -3,8 +3,30 @@ import { paintBackground } from './backgrounds.js';
 import { findNearestName, getAsset } from './assets/registry.js';
 import { ease, hexToRgb, lerp, mulberry32, type Ease } from './math.js';
 import { applyStyle, resolveStyle } from './styles.js';
-import type { KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
+import type { CameraT, KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
 import type { RGBFrame } from './types.js';
+
+const FLAT_CAMERA: CameraT = { projection: 'flat', tilt: 0.5 };
+
+// Pseudo-isometric depth projection. `depth` 0→1 (near→far) pushes a sprite
+// up the frame, shrinks it, and dims it, so a scene reads front-to-back.
+// At depth 0 it is the identity, so flat scenes are untouched.
+function projectIso(
+  cy: number,
+  size: number,
+  opacity: number,
+  depth: number,
+  tilt: number,
+  bufH: number,
+): { cy: number; size: number; opacity: number } {
+  if (depth <= 0 || tilt <= 0) return { cy, size, opacity };
+  const recede = depth * tilt;
+  return {
+    cy: cy - recede * bufH * 0.45,
+    size: size * (1 - recede * 0.45),
+    opacity: opacity * (1 - recede * 0.25),
+  };
+}
 
 export interface ComposeOpts {
   w: number;
@@ -15,6 +37,7 @@ export interface ComposeOpts {
 export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGenerator<RGBFrame> {
   const { w, h, fps } = opts;
   const style = resolveStyle(plan.style);
+  const camera = plan.camera ?? FLAT_CAMERA;
   let baseMs = 0;
   for (const shot of plan.shots) {
     const totalFrames = Math.ceil((shot.durationMs / 1000) * fps);
@@ -25,7 +48,7 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
       const shotTMs = Math.round((f * 1000) / fps);
       const buf = createBuffer(w, h);
       paintBackground(buf, effectiveBackground, shotTMs);
-      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot);
+      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot, camera);
       applyStyle(buf, style);
       yield { w, h, ptsMs: baseMs + shotTMs, rgba: buf.rgba };
     }
@@ -33,10 +56,10 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
   }
 }
 
-function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT): void {
+function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT, camera: CameraT): void {
   switch (layer.type) {
     case 'sprite':
-      drawSpriteLayer(buf, layer, tMs);
+      drawSpriteLayer(buf, layer, tMs, camera);
       return;
     case 'text':
       drawTextLayer(buf, layer, tMs, shot.durationMs);
@@ -44,6 +67,54 @@ function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT): v
     case 'particles':
       drawParticlesLayer(buf, layer, tMs);
       return;
+    case 'scatter':
+      drawScatterLayer(buf, layer, camera);
+      return;
+  }
+}
+
+function drawScatterLayer(
+  buf: PixelBuffer,
+  layer: Extract<LayerT, { type: 'scatter' }>,
+  camera: CameraT,
+): void {
+  const entry = getAsset(layer.asset);
+  if (!entry) {
+    const hint = findNearestName(layer.asset);
+    throw new Error(
+      `unknown sprite asset '${layer.asset}'` +
+        (hint ? ` (did you mean '${hint}'?)` : '') +
+        '. Run `terpix asset list` to see registered names.',
+    );
+  }
+  const color = hexToRgb(layer.color ?? '#cccccc');
+  const rand = mulberry32(layer.seed);
+  const n = layer.count;
+  const minWH = Math.min(buf.w, buf.h);
+  const iso = camera.projection === 'iso';
+  // Compute every instance, then paint back-to-front (lower y = nearer = on
+  // top) so overlapping copies layer naturally.
+  const instances: Array<{ cx: number; cy: number; size: number; opacity: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const baseX = lerp(layer.area.x0, layer.area.x1, t);
+    const baseY = lerp(layer.area.y0, layer.area.y1, t);
+    const jx = (rand() - 0.5) * 0.04;
+    const jy = (rand() - 0.5) * 0.06;
+    const js = 1 + (rand() - 0.5) * 2 * layer.scaleJitter;
+    const cx = (baseX + jx) * buf.w;
+    const baseSize = layer.scale * js * minWH * 0.2;
+    if (iso) {
+      const depth = lerp(layer.depth0, layer.depth1, t);
+      const p = projectIso((baseY + jy) * buf.h, baseSize, 1, depth, camera.tilt, buf.h);
+      instances.push({ cx, cy: p.cy, size: p.size, opacity: p.opacity });
+    } else {
+      instances.push({ cx, cy: (baseY + jy) * buf.h, size: baseSize, opacity: 1 });
+    }
+  }
+  instances.sort((a, b) => a.cy - b.cy);
+  for (const inst of instances) {
+    entry.draw({ buf, cx: inst.cx, cy: inst.cy, size: inst.size, color, rotation: 0, opacity: inst.opacity });
   }
 }
 
@@ -53,6 +124,7 @@ interface SpriteState {
   scale: number;
   rotation: number;
   opacity: number;
+  depth: number;
 }
 
 function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteState {
@@ -75,14 +147,19 @@ function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteS
     scale: lerp(prev.scale ?? 1, next.scale ?? prev.scale ?? 1, t),
     rotation: lerp(prev.rotation ?? 0, next.rotation ?? prev.rotation ?? 0, t),
     opacity: lerp(prev.opacity ?? 1, next.opacity ?? prev.opacity ?? 1, t),
+    depth: lerp(prev.depth ?? 0, next.depth ?? prev.depth ?? 0, t),
   };
 }
 
-function drawSpriteLayer(buf: PixelBuffer, layer: Extract<LayerT, { type: 'sprite' }>, tMs: number): void {
+function drawSpriteLayer(
+  buf: PixelBuffer,
+  layer: Extract<LayerT, { type: 'sprite' }>,
+  tMs: number,
+  camera: CameraT,
+): void {
   const state = interpolate(layer.keyframes, tMs, layer.ease);
   const cx = state.x * buf.w;
-  const cy = state.y * buf.h;
-  const size = state.scale * Math.min(buf.w, buf.h) * 0.2;
+  const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
   const color = hexToRgb(layer.color ?? '#cccccc');
   const entry = getAsset(layer.asset);
   if (!entry) {
@@ -93,7 +170,11 @@ function drawSpriteLayer(buf: PixelBuffer, layer: Extract<LayerT, { type: 'sprit
         '. Run `terpix asset list` to see registered names.',
     );
   }
-  entry.draw({ buf, cx, cy, size, color, rotation: state.rotation, opacity: state.opacity });
+  const proj =
+    camera.projection === 'iso'
+      ? projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h)
+      : { cy: state.y * buf.h, size: baseSize, opacity: state.opacity };
+  entry.draw({ buf, cx, cy: proj.cy, size: proj.size, color, rotation: state.rotation, opacity: proj.opacity });
 }
 
 // Target char-cell height as fraction of buffer height (glyph = 7 rows tall).

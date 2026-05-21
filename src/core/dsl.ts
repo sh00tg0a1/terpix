@@ -11,6 +11,11 @@ export const Keyframe = z.object({
   scale: z.number().optional(),
   rotation: z.number().optional(),
   opacity: z.number().min(0).max(1).optional(),
+  // Position into the scene's depth, 0 = nearest (front), 1 = farthest
+  // (back). Only meaningful when the plan's `camera.projection` is "iso":
+  // deeper sprites recede up the frame, shrink, and dim. Ignored in flat
+  // projection, so omitting it preserves classic 2D behavior.
+  depth: z.number().min(0).max(1).optional(),
 });
 
 export const Ease = z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).default('linear');
@@ -62,7 +67,42 @@ export const Layer = z.discriminatedUnion('type', [
     origin: Vec2.optional(),
     seed: z.number().int().default(1),
   }),
+  // Emit `count` copies of one asset tiled along the line from
+  // (area.x0,area.y0) to (area.x1,area.y1), with deterministic jitter.
+  // One node guarantees the count instead of relying on the LLM to hand-
+  // write N near-identical sprite layers (the cause of dropped subjects).
+  z.object({
+    type: z.literal('scatter'),
+    asset: SpriteAsset,
+    color: HexColor.optional(),
+    count: z.number().int().min(1).max(64),
+    area: z
+      .object({
+        x0: z.number().default(0.12),
+        y0: z.number().default(0.7),
+        x1: z.number().default(0.88),
+        y1: z.number().default(0.7),
+      })
+      .default({ x0: 0.12, y0: 0.7, x1: 0.88, y1: 0.7 }),
+    scale: z.number().positive().default(1),
+    scaleJitter: z.number().min(0).max(1).default(0.15),
+    // Floor depth at the two ends of `area`; instances interpolate between
+    // them. With an iso camera this tilts the scattered row into the frame
+    // (front dishes lower+bigger, back dishes higher+smaller). Flat: ignored.
+    depth0: z.number().min(0).max(1).default(0),
+    depth1: z.number().min(0).max(1).default(0),
+    seed: z.number().int().default(1),
+  }),
 ]);
+
+// Optional camera. `iso` turns on a pseudo-isometric (3/4) depth projection:
+// a layer's `depth` lifts it up the frame, scales it down, and dims it, so
+// scenes read with front-to-back recession. `tilt` controls how strong the
+// recession is. Default (absent / flat) keeps the classic 2D compositor.
+export const Camera = z.object({
+  projection: z.enum(['flat', 'iso']).default('flat'),
+  tilt: z.number().min(0).max(1).default(0.5),
+});
 
 export const Shot = z.object({
   id: z.string().min(1),
@@ -77,6 +117,7 @@ export const StylePresetName = z.enum([
   'minimalist',
   'silhouette',
   'noir',
+  'lineart',
 ]);
 
 export const Renderer = z.enum(['half', 'ascii']).default('half');
@@ -89,6 +130,7 @@ export const ScenePlan = z.object({
     .object({ w: z.number().int().positive(), h: z.number().int().positive() })
     .optional(),
   style: StylePresetName.optional(),
+  camera: Camera.optional(),
   renderer: Renderer,
   shots: z.array(Shot).min(1),
 });
@@ -98,3 +140,4 @@ export type ShotT = z.infer<typeof Shot>;
 export type LayerT = z.infer<typeof Layer>;
 export type KeyframeT = z.infer<typeof Keyframe>;
 export type BackgroundT = z.infer<typeof Background>;
+export type CameraT = z.infer<typeof Camera>;

@@ -1,4 +1,11 @@
-import { createCharBuffer, charBufferToFrame, drawString, setCell, type CharBuffer } from './char-grid.js';
+import {
+  createCharBuffer,
+  charBufferToFrame,
+  displayWidth,
+  drawString,
+  setCell,
+  type CharBuffer,
+} from './char-grid.js';
 import { paintBackgroundAscii } from './backgrounds-ascii.js';
 import { findNearestName, getAsset } from './assets/registry.js';
 import { ease, hexToRgb, lerp, mulberry32, type Ease } from './math.js';
@@ -41,6 +48,47 @@ function drawLayer(buf: CharBuffer, layer: LayerT, tMs: number, shot: ShotT): vo
     case 'particles':
       drawParticlesLayer(buf, layer, tMs);
       return;
+    case 'scatter':
+      drawScatterLayer(buf, layer);
+      return;
+  }
+}
+
+function drawScatterLayer(buf: CharBuffer, layer: Extract<LayerT, { type: 'scatter' }>): void {
+  const entry = getAsset(layer.asset);
+  if (!entry) {
+    const hint = findNearestName(layer.asset);
+    throw new Error(
+      `unknown sprite asset '${layer.asset}'` +
+        (hint ? ` (did you mean '${hint}'?)` : '') +
+        '. Run `terpix asset list` to see registered names.',
+    );
+  }
+  if (!entry.drawAscii) {
+    throw new Error(
+      `asset '${layer.asset}' has no ASCII representation (drawAscii missing). ` +
+        `Add a drawAscii() to its registry entry or render with --renderer half.`,
+    );
+  }
+  const color = hexToRgb(layer.color ?? '#cccccc');
+  const rand = mulberry32(layer.seed);
+  const n = layer.count;
+  const sizeBase = Math.min(buf.w * 0.5, buf.h) * 0.25;
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const baseX = lerp(layer.area.x0, layer.area.x1, t);
+    const baseY = lerp(layer.area.y0, layer.area.y1, t);
+    const jx = (rand() - 0.5) * 0.04;
+    const jy = (rand() - 0.5) * 0.06;
+    const js = 1 + (rand() - 0.5) * 2 * layer.scaleJitter;
+    entry.drawAscii({
+      buf,
+      cx: (baseX + jx) * buf.w,
+      cy: (baseY + jy) * buf.h,
+      size: layer.scale * js * sizeBase,
+      color,
+      opacity: 1,
+    });
   }
 }
 
@@ -127,14 +175,14 @@ function drawTextLayer(
     const totalRows = buf.h + lines.length;
     const baseY = Math.floor(buf.h - eased * totalRows * speedFactor);
     lines.forEach((line, i) => {
-      const x = Math.floor(layer.position.x * buf.w - line.length / 2);
+      const x = Math.floor(layer.position.x * buf.w - displayWidth(line) / 2);
       drawString(buf, line, x, baseY + i, color[0], color[1], color[2]);
     });
     return;
   }
   const lines = shown.split('\n');
   lines.forEach((line, i) => {
-    const x = Math.floor(layer.position.x * buf.w - line.length / 2);
+    const x = Math.floor(layer.position.x * buf.w - displayWidth(line) / 2);
     const y = Math.floor(layer.position.y * buf.h) + i;
     drawString(buf, line, x, y, color[0], color[1], color[2]);
   });

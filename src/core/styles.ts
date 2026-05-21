@@ -8,6 +8,7 @@ export const StylePreset = z.enum([
   'minimalist',
   'silhouette',
   'noir',
+  'lineart',
 ]);
 
 export type StylePresetT = z.infer<typeof StylePreset>;
@@ -52,6 +53,16 @@ const PRESETS: Record<StylePresetT, StyleConfig> = {
     edgeOnly: false,
     forceBackground: '#0c0c12',
     edgeThreshold: 45,
+  },
+  // Ink-on-paper outline mode: edge-detect the rendered frame so only the
+  // contours of shapes survive, drawn as dark ink on a paper background.
+  // This is the "simple line art / 简单线条" look.
+  lineart: {
+    palette: 'duotone',
+    paletteColors: ['#f7f4ec', '#14181f'],
+    edgeOnly: true,
+    forceBackground: '#f7f4ec',
+    edgeThreshold: 22,
   },
 };
 

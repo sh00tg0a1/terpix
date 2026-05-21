@@ -75,6 +75,41 @@ describe('ascii renderer', () => {
     expect(s).toMatch(/I/);
   });
 
+  it('renders CJK text natively into the char grid (wide cells + trailing sentinel)', async () => {
+    const cjkPlan = ScenePlan.parse({
+      ...basePlan,
+      shots: [
+        {
+          ...basePlan.shots[0],
+          layers: [
+            {
+              type: 'text' as const,
+              content: '真好吃',
+              style: 'static' as const,
+              color: '#ffffff',
+              size: 'md' as const,
+              position: { x: 0.5, y: 0.5 },
+            },
+          ],
+        },
+      ],
+    });
+    const frames = [];
+    for await (const f of compositeAscii(cjkPlan, { w: 40, h: 10, fps: 12 })) frames.push(f);
+    const frame = frames[0]!;
+    const y = Math.floor(0.5 * 10);
+    const startX = Math.floor(40 * 0.5 - 3 /* displayWidth("真好吃")=6 */);
+    // First glyph at startX, its trailing column is the WIDE_TRAIL sentinel.
+    expect(frame.chars[y * 40 + startX]).toBe('真'.charCodeAt(0));
+    expect(frame.chars[y * 40 + startX + 1]).toBe(0x0001);
+    expect(frame.chars[y * 40 + startX + 2]).toBe('好'.charCodeAt(0));
+    expect(frame.chars[y * 40 + startX + 4]).toBe('吃'.charCodeAt(0));
+    // Encoder emits the multi-byte UTF-8 for the CJK chars and the round-trip
+    // string contains them (the sentinel produces no output).
+    const s = new TextDecoder().decode(new AsciiEncoder().encode(frame));
+    expect(s).toContain('真好吃');
+  });
+
   it('sprite layer without drawAscii throws helpful error', async () => {
     const badPlan = ScenePlan.parse({
       ...basePlan,

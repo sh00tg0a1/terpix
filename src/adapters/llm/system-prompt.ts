@@ -233,6 +233,66 @@ at different scales/positions create depth.
   ]
 }
 \`\`\`
+
+### Prompt: "一桌子菜，两个人围着桌子吃饭" (a table full of dishes, two people eating around it)
+Note: indoor/dining + crowd. Warm gradient bg (NOT minimalist). One \`table\`
+centerpiece (wide, scale ~3, y≈0.8); the dishes are a PLURAL ("一桌子菜") so use
+ONE \`scatter\` of \`bowl\` (count 5) along the table top, NOT five hand-written
+sprites. Two \`human\` flanking the table at scale ~2.8 so they tower over the
+props (human aspect 0.45 is short at scale 1). Subjects span ≥60% width.
+\`\`\`json
+{
+  "version": 1,
+  "title": "feast",
+  "fps": 24,
+  "renderer": "half",
+  "shots": [
+    {
+      "id": "dinner",
+      "durationMs": 6000,
+      "background": {
+        "type": "gradient",
+        "from": "#4a2e1c",
+        "to": "#1a0e08",
+        "direction": "vertical"
+      },
+      "layers": [
+        {
+          "type": "sprite",
+          "asset": "table",
+          "color": "#6b4a2f",
+          "ease": "linear",
+          "keyframes": [{ "tMs": 0, "x": 0.5, "y": 0.8, "scale": 3.0 }]
+        },
+        {
+          "type": "sprite",
+          "asset": "human",
+          "color": "#c75b39",
+          "ease": "linear",
+          "keyframes": [{ "tMs": 0, "x": 0.13, "y": 0.84, "scale": 2.8 }]
+        },
+        {
+          "type": "sprite",
+          "asset": "human",
+          "color": "#3b6ea5",
+          "ease": "linear",
+          "keyframes": [{ "tMs": 0, "x": 0.87, "y": 0.84, "scale": 2.8 }]
+        },
+        {
+          "type": "scatter",
+          "asset": "bowl",
+          "color": "#c0392b",
+          "count": 5,
+          "area": { "x0": 0.32, "y0": 0.69, "x1": 0.68, "y1": 0.69 },
+          "scale": 0.95,
+          "scaleJitter": 0.12,
+          "seed": 3
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
 `;
 
 export function buildSystemPrompt(opts: PromptOpts = {}): string {
@@ -277,6 +337,13 @@ export function buildSystemPrompt(opts: PromptOpts = {}): string {
       `  characters render blank. Styles: static, crawl, typewriter, fade-in.`,
       `  Sizes: sm, md, lg. (See text rules below if your scene has text.)`,
       `- \`particles\` — kinds: snow, rain, sparks, thrust. Optional origin.`,
+      `- \`scatter\` — emit \`count\` copies of ONE \`asset\` tiled along the line`,
+      `  from \`area\`.{x0,y0} to {x1,y1}, auto-jittered. USE THIS for any plural`,
+      `  ("一桌子菜", "a forest", "a crowd") instead of hand-writing N sprite`,
+      `  layers — one scatter node guarantees the count. Fields: \`asset\`,`,
+      `  \`count\`, \`area\`{x0,y0,x1,y1}, \`scale\`, \`scaleJitter\` (0-1), \`seed\`.`,
+      `  Static (no keyframes). For a row of dishes on a table: area along the`,
+      `  table top, e.g. {x0:0.3,y0:0.68,x1:0.7,y1:0.68}, count 5.`,
       ``,
       `## Sprite scale, aspect, and anchor (math for layout)`,
       ``,
@@ -299,6 +366,16 @@ export function buildSystemPrompt(opts: PromptOpts = {}): string {
       `\`bottom\` → ground-resting; place near the horizon (y≈0.72..0.8), not`,
       `floating in the sky.`,
       ``,
+      `## Camera (optional 3/4 "overhead" view)`,
+      `Set top-level \`camera: { projection: "iso", tilt: 0.5 }\` when the prompt`,
+      `asks for a tilted / overhead / bird's-eye / 45° / 俯视 / 斜视角 view.`,
+      `Then give layers a \`depth\` (0 = near/front, 1 = far/back): deeper sprites`,
+      `recede UP the frame, shrink, and dim — front-to-back recession. For a`,
+      `\`scatter\` use \`depth0\`/\`depth1\` to tilt the row into the scene (e.g.`,
+      `front dishes depth 0.0, back dishes depth 0.6). NOTE: sprites are still`,
+      `front-facing art — this fakes depth via stacking, it is NOT a true`,
+      `top-down render. Omit \`camera\` for normal flat scenes.`,
+      ``,
       `## Available sprites (pick by exact name; aspect = W:H at scale=1)`,
       ``,
       catalogMarkdown({ renderer }),
@@ -309,6 +386,9 @@ export function buildSystemPrompt(opts: PromptOpts = {}): string {
       `- \`minimalist\` — duotone cream + dark-grey. Calm, contemplative.`,
       `- \`silhouette\` — duotone dusk-yellow + ink-black. Poster-like.`,
       `- \`noir\` — full color with dark bg override. Moody.`,
+      `- \`lineart\` — ink-on-paper OUTLINES only (edge-detected). Use when the`,
+      `  prompt asks for "line art / 线条 / 简笔 / sketch / outline". Subjects`,
+      `  still need contrast vs background so their edges register.`,
       ``,
       `## Hard rules`,
       `- \`version\` is always \`1\`. \`renderer\` should be "${renderer}".`,
@@ -347,12 +427,23 @@ export function buildSystemPrompt(opts: PromptOpts = {}): string {
 
   // ---- CONDITIONAL blocks (only when the scene needs them) -------------
   if (scene.text) {
+    const charsetRule =
+      renderer === 'ascii'
+        ? [
+            `- The \`ascii\` renderer draws REAL characters in the terminal, so`,
+            `  **non-English text including Chinese renders natively** — keep the`,
+            `  original (e.g. "真好吃" stays "真好吃"). Do NOT translate or`,
+            `  transliterate. Each CJK glyph takes two columns; budget width.`,
+          ]
+        : [
+            `- For non-English text, **TRANSLATE to natural English, do NOT`,
+            `  transliterate to pinyin** (e.g. "真好吃" → "SO GOOD", NOT "ZHEN HAO`,
+            `  CHI"). Pinyin helps no one. If you cannot translate, omit it.`,
+          ];
     blocks.push(
       [
         `## Text rules (this prompt involves text)`,
-        `- For non-English text, **TRANSLATE to natural English, do NOT`,
-        `  transliterate to pinyin** (e.g. "真好吃" → "SO GOOD", NOT "ZHEN HAO`,
-        `  CHI"). Pinyin helps no one. If you cannot translate, omit it.`,
+        ...charsetRule,
         `- \`position\` is the *center* of the block; block height is`,
         `  SIZE_FRAC × bufferH (sm=10%, md=20%, lg=32%). Keep on-screen with`,
         `  margin ≥ half block: lg → y ∈ [0.18,0.82], md → [0.12,0.88],`,
@@ -403,8 +494,10 @@ export function buildSystemPrompt(opts: PromptOpts = {}): string {
     blocks.push(
       [
         `## Crowd / spread (this prompt has multiple subjects)`,
-        `- Tile the repeated asset across x ∈ [0.12, 0.88] with small y (±0.05)`,
-        `  and scale (±0.15) variation so the group looks natural.`,
+        `- **Prefer a single \`scatter\` layer** over hand-written sprite copies:`,
+        `  \`{ type:"scatter", asset:"...", count:6, area:{x0:0.12,y0:0.7,x1:0.88,`,
+        `  y1:0.7}, scale:1, scaleJitter:0.15 }\`. It tiles + jitters for you and`,
+        `  guarantees the count.`,
         `- 5–8 instances is typical for "many / 群 / 一桌". Do NOT emit a single`,
         `  small instance for a plural prompt.`,
       ].join('\n'),

@@ -170,14 +170,10 @@ function patchSpriteAssetEnum(node: unknown, names: string[]): void {
     (obj['properties'] as Record<string, unknown>)['type'] &&
     (obj['properties'] as Record<string, unknown>)['asset']
   ) {
+    // Only sprite & scatter layers carry an `asset` ref; both must be
+    // constrained to the live registry names.
     const props = obj['properties'] as Record<string, unknown>;
-    const typeSchema = props['type'] as Record<string, unknown>;
-    if (
-      typeSchema &&
-      (typeSchema['const'] === 'sprite' || typeSchema['enum']?.toString().includes('sprite'))
-    ) {
-      props['asset'] = { type: 'string', enum: names };
-    }
+    props['asset'] = { type: 'string', enum: names };
   }
   for (const v of Object.values(obj)) {
     if (Array.isArray(v)) v.forEach((x) => patchSpriteAssetEnum(x, names));

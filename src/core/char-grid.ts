@@ -1,5 +1,36 @@
 import type { CharFrame } from './types.js';
 
+// Sentinel stored in the cell *after* a double-width (CJK) glyph. The encoder
+// emits nothing for it: the wide glyph to its left already occupies this
+// terminal column, so emitting a space here would shove the row right by one.
+export const WIDE_TRAIL = 0x0001;
+
+// East Asian Wide / Fullwidth code points occupy two terminal columns. We only
+// handle the BMP because cells store a single UTF-16 unit. Covers CJK ideo-
+// graphs, kana, Hangul, and fullwidth forms — enough for Chinese text.
+export function isWideChar(code: number): boolean {
+  return (
+    (code >= 0x1100 && code <= 0x115f) || // Hangul Jamo
+    (code >= 0x2e80 && code <= 0x303e) || // CJK radicals, Kangxi, punctuation
+    (code >= 0x3041 && code <= 0x33ff) || // kana, CJK symbols
+    (code >= 0x3400 && code <= 0x4dbf) || // CJK Ext A
+    (code >= 0x4e00 && code <= 0x9fff) || // CJK Unified Ideographs
+    (code >= 0xa000 && code <= 0xa4cf) || // Yi
+    (code >= 0xac00 && code <= 0xd7a3) || // Hangul syllables
+    (code >= 0xf900 && code <= 0xfaff) || // CJK compatibility ideographs
+    (code >= 0xfe30 && code <= 0xfe4f) || // CJK compatibility forms
+    (code >= 0xff00 && code <= 0xff60) || // Fullwidth forms
+    (code >= 0xffe0 && code <= 0xffe6)
+  );
+}
+
+// Display width of a string in terminal columns (wide chars count as 2).
+export function displayWidth(text: string): number {
+  let w = 0;
+  for (let i = 0; i < text.length; i++) w += isWideChar(text.charCodeAt(i)) ? 2 : 1;
+  return w;
+}
+
 export interface CharBuffer {
   w: number;
   h: number;
@@ -72,9 +103,21 @@ export function drawString(
   fg: number,
   fb: number,
 ): void {
+  let col = x;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    if (code === 0x20) continue; // skip transparent space inside string
-    setCell(buf, x + i, y, code, fr, fg, fb);
+    if (code === 0x20) {
+      col += 1; // transparent space still advances the cursor
+      continue;
+    }
+    setCell(buf, col, y, code, fr, fg, fb);
+    if (isWideChar(code)) {
+      // Reserve the next column so following glyphs don't render under the
+      // wide one; the encoder skips this sentinel.
+      setCell(buf, col + 1, y, WIDE_TRAIL, fr, fg, fb);
+      col += 2;
+    } else {
+      col += 1;
+    }
   }
 }

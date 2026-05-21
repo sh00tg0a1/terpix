@@ -1,4 +1,5 @@
 import type { CharFrame } from '../../core/types.js';
+import { WIDE_TRAIL } from '../../core/char-grid.js';
 
 const ESC = 0x1b;
 const NEWLINE = new TextEncoder().encode('\r\n');
@@ -47,6 +48,9 @@ export class AsciiEncoder {
         const bG = bg[ci + 1]!;
         const bB = bg[ci + 2]!;
         const codeRaw = chars[idx]!;
+        // The cell trailing a wide glyph: emit nothing — the wide char to its
+        // left already spans this terminal column.
+        if (codeRaw === WIDE_TRAIL) continue;
         const code = codeRaw === 0 ? 0x20 : codeRaw;
         if (fR !== curFgR || fG !== curFgG || fB !== curFgB) {
           writeAnsiColor(out, 38, fR, fG, fB);

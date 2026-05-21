@@ -22,11 +22,22 @@ export interface AsciiDrawCtx {
 
 export type AssetSource = 'builtin' | 'shape' | 'bitmap' | 'plugin';
 
+export interface AssetMetrics {
+  // Aspect ratio of the sprite's bounding box (width / height) when drawn
+  // at scale=1.0. Lets the planner predict coverage and layout.
+  aspect: number;
+  // Where the sprite's visual "weight" sits within its bbox: 'center' for
+  // floating things (moon, planet, spaceship), 'bottom' for ground-resting
+  // things (mountain, tree, bowl) — useful for picking y anchor.
+  anchor: 'center' | 'bottom';
+}
+
 export interface AssetEntry {
   name: string;
   description: string;
   source: AssetSource;
   origin?: string;
+  metrics?: AssetMetrics;
   draw(ctx: DrawCtx): void;
   drawAscii?(ctx: AsciiDrawCtx): void;
 }

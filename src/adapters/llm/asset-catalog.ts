@@ -5,13 +5,15 @@ import { listAssets } from '../../core/assets/registry.js';
 // planner unless the plan picks renderer=ascii. Currently a small list; we
 // could probe `entry.draw` dynamically but the safer signal is the err
 // thrown — we keep it static for now.
-const ASCII_ONLY = new Set(['droid', 'human']);
+const ASCII_ONLY = new Set(['droid']);
 
 export interface CatalogEntry {
   name: string;
   description: string;
   source: string;
   asciiOnly: boolean;
+  aspect?: number;
+  anchor?: 'center' | 'bottom';
 }
 
 export function spriteCatalog(opts: { renderer?: 'half' | 'ascii' } = {}): CatalogEntry[] {
@@ -23,6 +25,8 @@ export function spriteCatalog(opts: { renderer?: 'half' | 'ascii' } = {}): Catal
       description: e.description,
       source: e.source,
       asciiOnly: ASCII_ONLY.has(e.name),
+      aspect: e.metrics?.aspect,
+      anchor: e.metrics?.anchor,
     }));
 }
 
@@ -36,7 +40,11 @@ export function catalogMarkdown(opts: { renderer?: 'half' | 'ascii' } = {}): str
   return entries
     .map((e) => {
       const flag = e.asciiOnly ? ' [ascii-only]' : '';
-      return `- **${e.name}**${flag} — ${e.description}`;
+      const metric =
+        e.aspect !== undefined && e.anchor !== undefined
+          ? ` (aspect ${e.aspect.toFixed(2)} W:H, anchor ${e.anchor})`
+          : '';
+      return `- **${e.name}**${flag}${metric} — ${e.description}`;
     })
     .join('\n');
 }

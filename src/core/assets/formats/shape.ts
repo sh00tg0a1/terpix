@@ -57,6 +57,9 @@ export const ShapeAssetFile = z.object({
   name: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9_-]*$/i),
   description: z.string().min(3).max(300),
   viewBox: z.object({ w: z.number().positive(), h: z.number().positive() }),
+  // Where the visual weight sits in the bbox. 'bottom' for ground-resting
+  // objects (bowls, plates, furniture); 'center' for floating/round things.
+  anchor: z.enum(['center', 'bottom']).default('center'),
   primitives: z.array(Primitive).min(1).max(64),
 });
 

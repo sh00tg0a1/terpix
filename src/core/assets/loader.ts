@@ -67,6 +67,7 @@ function loadShapeFile(path: string, report: LoadReport): void {
     description: spec.description,
     source: 'shape',
     origin: path,
+    metrics: { aspect: spec.viewBox.w / spec.viewBox.h, anchor: spec.anchor },
     draw: makeShapeDrawer(spec),
   });
   report.loaded.push({ name: spec.name, source: 'shape', origin: path });

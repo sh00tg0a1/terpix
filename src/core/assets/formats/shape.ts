@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { fillCircle, fillRect, fillTriangle, setPixel } from '../../pixel.js';
-import type { DrawCtx } from '../registry.js';
+import { setCell } from '../../char-grid.js';
+import type { AsciiDrawCtx, DrawCtx } from '../registry.js';
 
 const HexOrPlaceholder = z.string().regex(/^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})|@main)$/);
 const Point = z.tuple([z.number(), z.number()]);
@@ -61,6 +62,10 @@ export const ShapeAssetFile = z.object({
   // objects (bowls, plates, furniture); 'center' for floating/round things.
   anchor: z.enum(['center', 'bottom']).default('center'),
   primitives: z.array(Primitive).min(1).max(64),
+  // Optional hand-drawn ascii art (rows). When present the ascii renderer
+  // blits this fixed-size glyph instead of the auto silhouette — clearer for
+  // small recognizable objects. ' ' and '@' are transparent.
+  ascii: z.array(z.string().max(40)).max(24).optional(),
 });
 
 export type ShapeAssetFileT = z.infer<typeof ShapeAssetFile>;
@@ -236,6 +241,97 @@ function drawPrimitive(
       return;
     }
   }
+}
+
+// Is viewBox point (vx, vy) inside the filled area of any primitive? Used to
+// rasterize a shape into the coarse ascii char grid as a solid silhouette.
+function pointInPrimitives(prims: PrimitiveT[], vx: number, vy: number): boolean {
+  for (const p of prims) {
+    switch (p.kind) {
+      case 'rect':
+        if (vx >= p.x && vx <= p.x + p.w && vy >= p.y && vy <= p.y + p.h) return true;
+        break;
+      case 'circle': {
+        const dx = vx - p.cx;
+        const dy = vy - p.cy;
+        if (dx * dx + dy * dy <= p.r * p.r) return true;
+        break;
+      }
+      case 'ellipse': {
+        const dx = (vx - p.cx) / p.rx;
+        const dy = (vy - p.cy) / p.ry;
+        if (dx * dx + dy * dy <= 1) return true;
+        break;
+      }
+      case 'triangle':
+        if (pointInPoly(p.points, vx, vy)) return true;
+        break;
+      case 'polygon':
+        if (pointInPoly(p.points, vx, vy)) return true;
+        break;
+      case 'line':
+        break; // strokes don't contribute to the silhouette
+    }
+  }
+  return false;
+}
+
+function pointInPoly(pts: ReadonlyArray<readonly [number, number]>, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i]![0];
+    const yi = pts[i]![1];
+    const xj = pts[j]![0];
+    const yj = pts[j]![1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// Blit fixed-size ascii art centered at (cx,cy). ' '/'@' = transparent.
+function blitArt(ctx: AsciiDrawCtx, art: string[]): void {
+  const h = art.length;
+  const w = art.reduce((m, l) => Math.max(m, l.length), 0);
+  const x0 = Math.floor(ctx.cx - w / 2);
+  const y0 = Math.floor(ctx.cy - h / 2);
+  const [r, g, b] = ctx.color;
+  for (let y = 0; y < h; y++) {
+    const line = art[y]!;
+    for (let x = 0; x < line.length; x++) {
+      const ch = line.charCodeAt(x);
+      if (ch === 0x20 || ch === 0x40) continue;
+      setCell(ctx.buf, x0 + x, y0 + y, ch, r, g, b);
+    }
+  }
+}
+
+// Ascii drawer for a shape asset: prefer hand-drawn `ascii` art (fixed size,
+// recognizable); otherwise rasterize a solid silhouette from the primitives.
+// ascii cells are ~2× taller than wide, so columns get a 2× factor. Silhouette
+// height is capped so a large `scale` can't fill the screen with one blob.
+export function makeShapeAsciiDrawer(spec: ShapeAssetFileT): (ctx: AsciiDrawCtx) => void {
+  const { viewBox, primitives, ascii } = spec;
+  const aspect = viewBox.w / viewBox.h;
+  return function drawShapeAscii(ctx: AsciiDrawCtx): void {
+    if (ascii && ascii.length > 0) {
+      blitArt(ctx, ascii);
+      return;
+    }
+    const rows = Math.min(8, Math.max(2, Math.round(ctx.size)));
+    const cols = Math.max(2, Math.round(rows * aspect * 2));
+    const x0 = Math.floor(ctx.cx - cols / 2);
+    const y0 = Math.floor(ctx.cy - rows / 2);
+    const [r, g, b] = ctx.color;
+    for (let row = 0; row < rows; row++) {
+      const vy = ((row + 0.5) / rows) * viewBox.h;
+      for (let col = 0; col < cols; col++) {
+        const vx = ((col + 0.5) / cols) * viewBox.w;
+        if (pointInPrimitives(primitives, vx, vy)) {
+          setCell(ctx.buf, x0 + col, y0 + row, 0x2588, r, g, b); // █ full block
+        }
+      }
+    }
+  };
 }
 
 export function parseShapeJson(text: string, source = '<shape>'):

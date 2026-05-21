@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { homedir } from 'node:os';
-import { makeShapeDrawer, parseShapeJson } from './formats/shape.js';
+import { makeShapeAsciiDrawer, makeShapeDrawer, parseShapeJson } from './formats/shape.js';
 import { registerAsset } from './registry.js';
 
 export interface LoadReport {
@@ -69,6 +69,7 @@ function loadShapeFile(path: string, report: LoadReport): void {
     origin: path,
     metrics: { aspect: spec.viewBox.w / spec.viewBox.h, anchor: spec.anchor },
     draw: makeShapeDrawer(spec),
+    drawAscii: makeShapeAsciiDrawer(spec),
   });
   report.loaded.push({ name: spec.name, source: 'shape', origin: path });
 }

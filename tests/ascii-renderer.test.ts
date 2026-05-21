@@ -3,8 +3,22 @@ import { ScenePlan } from '../src/core/dsl.js';
 import { compositeAscii } from '../src/core/compositor-ascii.js';
 import { AsciiEncoder } from '../src/adapters/terminal/ascii.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
+import { registerAsset, getAsset } from '../src/core/assets/registry.js';
+import { loadUserAssets } from '../src/core/assets/loader.js';
 
-beforeAll(() => registerBuiltins());
+beforeAll(() => {
+  registerBuiltins();
+  loadUserAssets(); // bowl/cat/steam shape assets (get an ascii silhouette/art)
+  // An asset with a pixel drawer but no ascii representation, to exercise the
+  // ascii-renderer fallback error. (All shipped assets now have drawAscii.)
+  registerAsset({
+    name: 'noascii',
+    description: 'test asset with no ascii drawer',
+    source: 'plugin',
+    metrics: { aspect: 1, anchor: 'center' },
+    draw: () => {},
+  });
+});
 
 const basePlan = {
   version: 1 as const,
@@ -110,6 +124,36 @@ describe('ascii renderer', () => {
     expect(s).toContain('真好吃');
   });
 
+  it('all builtin sprites now have an ascii drawer', () => {
+    for (const name of ['spaceship', 'planet', 'moon', 'star', 'human', 'mountain', 'tree', 'superman', 'table']) {
+      expect(getAsset(name)?.drawAscii, name).toBeTypeOf('function');
+    }
+  });
+
+  it('a dining scene (table + bowl scatter + human) renders in ascii without throwing', async () => {
+    const diningPlan = ScenePlan.parse({
+      ...basePlan,
+      shots: [
+        {
+          ...basePlan.shots[0],
+          layers: [
+            { type: 'sprite' as const, asset: 'table', color: '#b07840', ease: 'linear' as const,
+              keyframes: [{ tMs: 0, x: 0.5, y: 0.78, scale: 3 }] },
+            { type: 'sprite' as const, asset: 'human', color: '#e0875a', ease: 'linear' as const,
+              keyframes: [{ tMs: 0, x: 0.12, y: 0.72, scale: 3 }] },
+            { type: 'scatter' as const, asset: 'bowl', color: '#e04030', count: 5,
+              area: { x0: 0.34, y0: 0.62, x1: 0.66, y1: 0.62 }, scale: 1, scaleJitter: 0, depth0: 0, depth1: 0, seed: 3 },
+          ],
+        },
+      ],
+    });
+    let frame;
+    for await (const f of compositeAscii(diningPlan, { w: 60, h: 22, fps: 12 })) { frame = f; break; }
+    // bowl art top row starts with '.', so at least one '.' (0x2e) cell exists.
+    const dots = [...frame!.chars].filter((c) => c === 0x2e).length;
+    expect(dots).toBeGreaterThan(0);
+  });
+
   it('sprite layer without drawAscii throws helpful error', async () => {
     const badPlan = ScenePlan.parse({
       ...basePlan,
@@ -119,7 +163,7 @@ describe('ascii renderer', () => {
           layers: [
             {
               type: 'sprite' as const,
-              asset: 'mountain',
+              asset: 'noascii',
               color: '#cccccc',
               ease: 'linear' as const,
               keyframes: [{ tMs: 0, x: 0.5, y: 0.5 }],

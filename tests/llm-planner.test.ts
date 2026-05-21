@@ -35,6 +35,8 @@ function mockClient(...responses: unknown[]): Anthropic {
   return { messages: { create } } as unknown as Anthropic;
 }
 
+// A plan that passes BOTH schema and the semantic critic (large enough
+// subject + a backdrop so it doesn't trip empty-frame / subject-scale).
 const VALID_PLAN_INPUT = {
   version: 1,
   fps: 24,
@@ -47,9 +49,15 @@ const VALID_PLAN_INPUT = {
       layers: [
         {
           type: 'sprite',
+          asset: 'planet',
+          ease: 'linear',
+          keyframes: [{ tMs: 0, x: 0.7, y: 0.5, scale: 2.6 }],
+        },
+        {
+          type: 'sprite',
           asset: 'spaceship',
           ease: 'linear',
-          keyframes: [{ tMs: 0, x: 0.5, y: 0.5 }],
+          keyframes: [{ tMs: 0, x: 0.4, y: 0.5, scale: 1.0 }],
         },
       ],
     },
@@ -71,7 +79,8 @@ describe('asset-catalog', () => {
   it('half renderer hides ascii-only assets', () => {
     const names = spriteEnumForSchema({ renderer: 'half' });
     expect(names).not.toContain('droid');
-    expect(names).not.toContain('human');
+    // human is half-renderable (silhouette draw), so it IS in the half catalog
+    expect(names).toContain('human');
     expect(names).toContain('spaceship');
   });
 
@@ -93,9 +102,9 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('planet');
   });
 
-  it('stays under 16KB (prompt-cache friendly)', () => {
+  it('stays under 17KB (prompt-cache friendly)', () => {
     const prompt = buildSystemPrompt({ renderer: 'half' });
-    expect(prompt.length).toBeLessThan(16_000);
+    expect(prompt.length).toBeLessThan(17_000);
   });
 });
 

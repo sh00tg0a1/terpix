@@ -41,8 +41,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
+    "@types/pngjs": "^6.0.5",
     "commander": "^12.1.0",
     "openai": "^6.38.0",
+    "pngjs": "^7.0.0",
     "simplex-noise": "^4.0.3",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.2"

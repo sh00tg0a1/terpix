@@ -4,6 +4,8 @@ import { ScenePlan } from '../../core/dsl.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
+import { critiquePlan, formatIssuesForRetry } from './plan-critic.js';
+import { visionCritiquePlan, formatVisionIssuesForRetry } from './vision-critic.js';
 import { getAnthropicApiKey } from '../../core/config.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
 
@@ -50,7 +52,7 @@ function patchSpriteAssetEnum(node: unknown, names: string[]): void {
 export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Promise<PlanOk | PlanErr> {
   const model = req.model ?? cfg.defaultModel;
   const renderer = req.renderer ?? 'half';
-  const maxRetries = req.maxRetries ?? 3;
+  const maxRetries = req.maxRetries ?? (req.vision ? 5 : 3);
   const client = req.client ?? new Anthropic({ apiKey: cfg.apiKey });
 
   const system = buildSystemPrompt({ renderer });
@@ -74,8 +76,9 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
       attempt === 1
         ? baseUserMsg
         : baseUserMsg +
-          `\n\nThe previous attempt failed schema validation:\n${lastErr}\n` +
-          `Re-emit a corrected plan; use only listed asset names and the exact field shapes.`;
+          `\n\nThe previous attempt was rejected. Reasons:\n${lastErr}\n\n` +
+          `Re-emit a corrected plan. Use only listed asset names and field shapes; ` +
+          `address each numbered issue above.`;
     let resp: Awaited<ReturnType<typeof client.messages.create>>;
     try {
       resp = await client.messages.create({
@@ -116,21 +119,44 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
       continue;
     }
     const parsed = ScenePlan.safeParse(tool.input);
-    if (parsed.success) {
-      return {
-        ok: true,
-        plan: parsed.data,
-        inputTokens: totalIn,
-        outputTokens: totalOut,
-        cacheReadTokens: totalCacheRead,
-        cacheCreateTokens: totalCacheCreate,
-        attempts: attempt,
-      };
+    if (!parsed.success) {
+      lastErr = parsed.error.issues
+        .slice(0, 8)
+        .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+        .join('; ');
+      continue;
     }
-    lastErr = parsed.error.issues
-      .slice(0, 8)
-      .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
-      .join('; ');
+    const critique = critiquePlan(req.prompt, parsed.data);
+    if (!critique.ok && attempt < maxRetries) {
+      lastErr =
+        `the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`;
+      continue;
+    }
+    if (req.vision && (req.vision.rounds ?? 1) > 0 && attempt < maxRetries) {
+      const vc = await visionCritiquePlan(req.prompt, parsed.data, {
+        apiKey: req.vision.apiKey,
+        ...(req.vision.baseURL ? { baseURL: req.vision.baseURL } : {}),
+        model: req.vision.model,
+      });
+      if ('error' in vc) {
+        process.stderr.write(`terpix plan: vision critic skipped: ${vc.error}\n`);
+      } else if (!vc.ok) {
+        lastErr =
+          `a vision review of the rendered preview frame flagged these ` +
+          `issues:\n${formatVisionIssuesForRetry(vc)}`;
+        req.vision = { ...req.vision, rounds: (req.vision.rounds ?? 1) - 1 };
+        continue;
+      }
+    }
+    return {
+      ok: true,
+      plan: parsed.data,
+      inputTokens: totalIn,
+      outputTokens: totalOut,
+      cacheReadTokens: totalCacheRead,
+      cacheCreateTokens: totalCacheCreate,
+      attempts: attempt,
+    };
   }
 
   return {

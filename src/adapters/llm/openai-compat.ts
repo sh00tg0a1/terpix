@@ -4,6 +4,9 @@ import { ScenePlan, type ScenePlanT } from '../../core/dsl.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
+import { critiquePlan, formatIssuesForRetry } from './plan-critic.js';
+import { visionCritiquePlan, formatVisionIssuesForRetry } from './vision-critic.js';
+import { buildVisualFewShot, type ContentPart } from './visual-fewshot.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
 
 interface OpenAICompatOpts {
@@ -22,7 +25,10 @@ export async function planFromNLOpenAICompat(
 ): Promise<PlanOk | PlanErr> {
   const model = req.model ?? cfg.defaultModel;
   const renderer = req.renderer ?? 'half';
-  const maxRetries = req.maxRetries ?? 3;
+  // Critics need room: each semantic/vision rejection consumes one attempt.
+  // With vision enabled, default to a larger budget so the loop can actually
+  // converge instead of shipping the last (possibly-rejected) candidate.
+  const maxRetries = req.maxRetries ?? (req.vision ? 5 : 3);
 
   const client =
     (req.openaiClient as OpenAI | undefined) ??
@@ -42,17 +48,24 @@ export async function planFromNLOpenAICompat(
     `Total duration: ${req.durationMs} ms.\n` +
     `fps: ${req.fps ?? 24}.${sizeHint}${styleHint}`;
 
+  const fewShotParts: ContentPart[] = req.visualFewShot ? await buildVisualFewShot() : [];
+
   let lastErr: string | undefined;
   let totalIn = 0;
   let totalOut = 0;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const userMsg =
+    const userText =
       attempt === 1
         ? baseUserMsg
         : baseUserMsg +
-          `\n\nThe previous attempt failed schema validation:\n${lastErr}\n` +
-          `Re-emit a corrected plan; use only listed asset names and the exact field shapes.`;
+          `\n\nThe previous attempt was rejected. Reasons:\n${lastErr}\n\n` +
+          `Re-emit a corrected plan. Use only listed asset names and field shapes; ` +
+          `address each numbered issue above.`;
+    const userContent =
+      fewShotParts.length > 0
+        ? [...fewShotParts, { type: 'text' as const, text: userText }]
+        : userText;
 
     let resp: Awaited<ReturnType<typeof client.chat.completions.create>>;
     try {
@@ -61,7 +74,8 @@ export async function planFromNLOpenAICompat(
         max_tokens: 4096,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: userMsg },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { role: 'user', content: userContent as any },
         ],
         tools: [
           {
@@ -100,21 +114,44 @@ export async function planFromNLOpenAICompat(
     }
 
     const parsed = ScenePlan.safeParse(json);
-    if (parsed.success) {
-      return {
-        ok: true,
-        plan: parsed.data,
-        inputTokens: totalIn,
-        outputTokens: totalOut,
-        cacheReadTokens: 0,
-        cacheCreateTokens: 0,
-        attempts: attempt,
-      };
+    if (!parsed.success) {
+      lastErr = parsed.error.issues
+        .slice(0, 8)
+        .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+        .join('; ');
+      continue;
     }
-    lastErr = parsed.error.issues
-      .slice(0, 8)
-      .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
-      .join('; ');
+    const critique = critiquePlan(req.prompt, parsed.data);
+    if (!critique.ok && attempt < maxRetries) {
+      lastErr =
+        `the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`;
+      continue;
+    }
+    if (req.vision && (req.vision.rounds ?? 1) > 0 && attempt < maxRetries) {
+      const vc = await visionCritiquePlan(req.prompt, parsed.data, {
+        apiKey: req.vision.apiKey,
+        ...(req.vision.baseURL ? { baseURL: req.vision.baseURL } : {}),
+        model: req.vision.model,
+      });
+      if ('error' in vc) {
+        process.stderr.write(`terpix plan: vision critic skipped: ${vc.error}\n`);
+      } else if (!vc.ok) {
+        lastErr =
+          `a vision review of the rendered preview frame flagged these ` +
+          `issues:\n${formatVisionIssuesForRetry(vc)}`;
+        req.vision = { ...req.vision, rounds: (req.vision.rounds ?? 1) - 1 };
+        continue;
+      }
+    }
+    return {
+      ok: true,
+      plan: parsed.data,
+      inputTokens: totalIn,
+      outputTokens: totalOut,
+      cacheReadTokens: 0,
+      cacheCreateTokens: 0,
+      attempts: attempt,
+    };
   }
 
   return {

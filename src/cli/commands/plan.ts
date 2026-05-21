@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { planFromNL, hasLLMKey } from '../../adapters/llm/provider.js';
+import { planFromNL, hasLLMKey, resolveProvider } from '../../adapters/llm/provider.js';
 
 export interface PlanCommandOpts {
   prompt: string;
@@ -8,6 +8,9 @@ export interface PlanCommandOpts {
   model?: string;
   renderer?: 'half' | 'ascii';
   style?: string;
+  visionModel?: string;
+  visionRounds?: number;
+  visualFewShot?: boolean;
 }
 
 export function parseDurationMs(raw: string): number {
@@ -25,7 +28,7 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     console.error(
       'terpix plan: no LLM API key configured.\n' +
         '  Run: terpix config show\n' +
-        '  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | openai_compat)',
+        '  Run: terpix config set <provider>_api_key ...  (anthropic | openai | minimax | qwen | openai_compat)',
     );
     process.exit(2);
   }
@@ -33,6 +36,28 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     console.error('terpix plan: prompt is empty.');
     process.exit(1);
   }
+  // If --vision-model is set, route the vision critic through the same
+  // provider (its endpoint + key) so it works out-of-the-box for qwen,
+  // openai, etc. The vision model must be vision-capable (qwen-vl-plus,
+  // gpt-4o, etc.).
+  let vision: { apiKey: string; baseURL?: string; model: string; rounds: number } | undefined;
+  if (opts.visionModel) {
+    const r = resolveProvider();
+    if ('error' in r) {
+      console.error(`terpix plan: vision critic disabled: ${r.error}`);
+    } else {
+      vision = {
+        apiKey: r.apiKey,
+        ...(r.baseURL ? { baseURL: r.baseURL } : {}),
+        model: opts.visionModel,
+        rounds: opts.visionRounds ?? 1,
+      };
+      process.stderr.write(
+        `terpix plan: vision critic enabled (model=${vision.model}, rounds=${vision.rounds})\n`,
+      );
+    }
+  }
+
   process.stderr.write('terpix plan: calling LLM...\n');
   const result = await planFromNL({
     prompt: opts.prompt,
@@ -40,6 +65,8 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.renderer ? { renderer: opts.renderer } : {}),
     ...(opts.style ? { style: opts.style } : {}),
+    ...(vision ? { vision } : {}),
+    ...(opts.visualFewShot ? { visualFewShot: true } : {}),
   });
 
   if (!result.ok) {

@@ -84,7 +84,10 @@ program
   .option('--model <id>', 'LLM model id (defaults to config default_model)')
   .option('--renderer <name>', 'half | ascii', 'half')
   .option('--style <name>', 'default | starwars | minimalist | silhouette | noir')
-  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string }) => {
+  .option('--vision-model <id>', 'vision-LLM id for the in-loop frame critic (e.g. qwen-vl-plus). When set, the planner renders a preview frame, asks this model what to fix, and retries.')
+  .option('--vision-rounds <n>', 'max vision-critic retries (default 1)', '1')
+  .option('--visual-fewshot', 'prepend rendered reference frames + their JSON to the prompt (requires a vision-capable planner model, e.g. qwen-plus)')
+  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string; visionModel?: string; visionRounds?: string; visualFewshot?: boolean }) => {
     let durationMs: number;
     try {
       durationMs = parseDurationMs(opts.duration);
@@ -99,6 +102,9 @@ program
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.renderer === 'ascii' ? { renderer: 'ascii' as const } : { renderer: 'half' as const }),
       ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
+      ...(opts.visionRounds ? { visionRounds: parseInt(opts.visionRounds, 10) } : {}),
+      ...(opts.visualFewshot ? { visualFewShot: true } : {}),
     });
   });
 
@@ -166,7 +172,7 @@ program
   .command('config')
   .description('Manage ~/.config/terpix/config.json (API key, provider, default model, default style/renderer)')
   .argument('<subcommand>', 'show | setup | get <key> | set <key> [value] | unset <key> | path')
-  .argument('[key]', 'config key (provider | anthropic_api_key | openai_api_key | minimax_api_key | openai_compat_api_key | openai_compat_base_url | default_model | default_style | default_renderer)')
+  .argument('[key]', 'config key (provider | anthropic_api_key | openai_api_key | minimax_api_key | qwen_api_key | openai_compat_api_key | openai_compat_base_url | default_model | default_style | default_renderer)')
   .argument('[value]', 'value (omit for `set` to prompt with hidden input on a TTY)')
   .action(async (subcommand: string, key?: string, value?: string) => {
     const sub = subcommand as 'show' | 'setup' | 'get' | 'set' | 'unset' | 'path';

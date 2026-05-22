@@ -39,15 +39,15 @@ describe('relational placement (`on`)', () => {
     expect(g.cy).toBeGreaterThan(120);
   });
 
-  it('makes far (depth=1) items higher and smaller than near (depth=0)', () => {
-    const near = sprite({ type: 'sprite', asset: 'bowl', ease: 'linear', on: { layer: 'tbl', depth: 0 }, keyframes: [{ tMs: 0, scale: 1 }] });
-    const far = sprite({ type: 'sprite', asset: 'bowl', ease: 'linear', on: { layer: 'tbl', depth: 1 }, keyframes: [{ tMs: 0, scale: 1 }] });
+  it('spreads copies horizontally with dx, keeping them on the surface', () => {
+    const leftB = sprite({ type: 'sprite', asset: 'bowl', ease: 'linear', on: { layer: 'tbl', dx: -0.5 }, keyframes: [{ tMs: 0, scale: 1 }] });
+    const rightB = sprite({ type: 'sprite', asset: 'bowl', ease: 'linear', on: { layer: 'tbl', dx: 0.5 }, keyframes: [{ tMs: 0, scale: 1 }] });
     const buf = createBuffer(640, 360);
-    const geoms = resolveSpriteGeoms([table, near, far], buf, FLAT, 0);
-    const gn = geoms.get(near)!;
-    const gf = geoms.get(far)!;
-    expect(gf.cy).toBeLessThan(gn.cy); // far is higher up the frame
-    expect(gf.size).toBeLessThan(gn.size); // far is smaller
+    const geoms = resolveSpriteGeoms([table, leftB, rightB], buf, FLAT, 0);
+    const gl = geoms.get(leftB)!;
+    const gr = geoms.get(rightB)!;
+    expect(gl.cx).toBeLessThan(gr.cx); // dx spreads them left/right
+    expect(gl.cy).toBeCloseTo(gr.cy, 0); // same surface height
   });
 
   it('falls back to own keyframes when the target id is unknown', () => {

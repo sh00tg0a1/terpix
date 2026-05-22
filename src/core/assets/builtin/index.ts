@@ -100,13 +100,9 @@ export function registerBuiltins(): void {
   registerAsset({
     name: 'table',
     description:
-      'a table in 3/4 perspective: a receding top surface on four legs. Use for dining / interior scenes and place food sprites ON it with `on: { layer: <table id>, at: "surface", depth }` — depth 0 = near/front, 1 = far/back.',
+      'a flat side-on table: a top surface on two legs. Use for dining / interior scenes and place food sprites ON it with `on: { layer: <table id>, at: "surface" }` (spread copies with dx).',
     source: 'builtin',
-    metrics: {
-      aspect: 2.0,
-      anchor: 'bottom',
-      points: { surface: [0.5, 0.43], surfaceBack: [0.5, 0.32], surfaceFront: [0.5, 0.54] },
-    },
+    metrics: { aspect: 2.0, anchor: 'bottom', points: { surface: [0.5, 0.38] } },
     draw: drawTable,
     drawAscii: drawTableAscii,
   });

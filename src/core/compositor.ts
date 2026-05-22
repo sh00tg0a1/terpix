@@ -203,35 +203,18 @@ function attachPoint(asset: string): [number, number] {
 }
 
 // Resolve a sprite that declares `on`: land its attach point on the target's
-// named point. With `depth`, interpolate across the target's surfaceFront →
-// surfaceBack and shrink with distance so items recede on the surface.
+// named point. Pure 2D placement — the target's geometry and named point
+// decide where the child sits; the child keeps its own size.
 function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
   const childBase = baseSpriteGeom(layer, buf, camera, tMs);
   const on = layer.on!;
   const tGeom = target.geom;
-  const tPts = getAsset(target.layer.asset)?.metrics?.points;
+  const point = getAsset(target.layer.asset)?.metrics?.points?.[on.at] ?? [0.5, 0.5];
 
-  let px = 0.5;
-  let py = 0.5;
-  let sizeFactor = 1;
-  let xCompress = 1;
-  if (on.depth !== undefined && tPts?.surfaceFront && tPts?.surfaceBack) {
-    px = lerp(tPts.surfaceFront[0], tPts.surfaceBack[0], on.depth);
-    py = lerp(tPts.surfaceFront[1], tPts.surfaceBack[1], on.depth);
-    sizeFactor = lerp(1, 0.62, on.depth);
-    xCompress = lerp(1, 0.7, on.depth);
-  } else {
-    const p = tPts?.[on.at];
-    if (p) {
-      px = p[0];
-      py = p[1];
-    }
-  }
-
-  const fx = tGeom.cx + (px - 0.5) * tGeom.size + on.dx * tGeom.size * 0.5 * xCompress;
-  const fy = tGeom.cy + (py - 0.5) * tGeom.size + on.dy * tGeom.size;
+  const fx = tGeom.cx + (point[0] - 0.5) * tGeom.size + on.dx * tGeom.size * 0.5;
+  const fy = tGeom.cy + (point[1] - 0.5) * tGeom.size + on.dy * tGeom.size;
   const [ax, ay] = attachPoint(layer.asset);
-  const size = childBase.size * sizeFactor;
+  const size = childBase.size;
   return {
     cx: fx - (ax - 0.5) * size,
     cy: fy - (ay - 0.5) * size,

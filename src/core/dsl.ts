@@ -49,16 +49,14 @@ export const SpriteAsset = z.string().min(1);
 // resolves the absolute position from the target's rendered geometry, so
 // "bowl on table" stays put without the model hand-computing coordinates.
 export const PlaceOn = z.object({
-  // `id` of the target layer (e.g. the table).
+  // `id` of the target layer (e.g. a table, a mountain, a tree).
   layer: z.string().min(1),
-  // Named point on the target's sprite (from its asset metrics). Defaults to
-  // 'surface'. Falls back to the target's center if the point is unknown.
+  // Named point on the target's sprite (from its asset metrics, e.g. a table's
+  // 'surface', a mountain's 'peak', a tree's 'top'). Falls back to the
+  // target's center if the point is unknown.
   at: z.string().default('surface'),
-  // Depth across a surface: 0 = near/front (lower, larger), 1 = far/back
-  // (higher, smaller). Requires the target to expose surfaceFront/surfaceBack.
-  depth: z.number().min(0).max(1).optional(),
   // Fine offsets, as a fraction of the target's width/height. dx spreads
-  // copies left/right across the surface; dy nudges up/down.
+  // copies left/right across the target; dy nudges up/down.
   dx: z.number().default(0),
   dy: z.number().default(0),
 });

@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ScenePlan } from '../../core/dsl.js';
-import { buildSystemPrompt } from './system-prompt.js';
+import { Scene2 } from '../../core/scene2/schema.js';
+import { compileScene } from '../../core/scene2/compile.js';
+import { buildScenePrompt } from './scene-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
 import { critiquePlan, formatIssuesForRetry } from './plan-critic.js';
@@ -37,8 +38,8 @@ export async function planFromNLOpenAICompat(
       ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
     });
 
-  const system = buildSystemPrompt({ renderer, prompt: req.prompt });
-  const schema = zodToJsonSchema(ScenePlan, { target: 'openApi3' }) as Record<string, unknown>;
+  const system = buildScenePrompt({ renderer });
+  const schema = zodToJsonSchema(Scene2, { target: 'openApi3' }) as Record<string, unknown>;
   patchSpriteAssetEnum(schema, spriteEnumForSchema({ renderer }));
 
   const sizeHint = req.size ? ` Target canvas: ${req.size.w}x${req.size.h} cells.` : '';
@@ -83,7 +84,7 @@ export async function planFromNLOpenAICompat(
             function: {
               name: 'submit_plan',
               description:
-                'Submit the final ScenePlan v1 JSON for rendering. Call exactly once with the plan as the tool input.',
+                'Submit the final Scene v2 (relational scene) JSON. Call exactly once with the scene as the tool input.',
               parameters: schema,
             },
           },
@@ -113,12 +114,20 @@ export async function planFromNLOpenAICompat(
       continue;
     }
 
-    const parsed = ScenePlan.safeParse(json);
+    const parsed = Scene2.safeParse(json);
     if (!parsed.success) {
       lastErr = parsed.error.issues
         .slice(0, 8)
         .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
         .join('; ');
+      continue;
+    }
+    // Compile the relational scene to a v1 plan; critics + render run on it.
+    let plan;
+    try {
+      plan = compileScene(parsed.data);
+    } catch (err) {
+      lastErr = `scene failed to compile: ${(err as Error).message}`;
       continue;
     }
     // Blind heuristic and vision critics are COMPLEMENTARY and run together:
@@ -127,7 +136,7 @@ export async function planFromNLOpenAICompat(
     // never-satisfiable blind rule would otherwise burn the whole retry
     // budget and the vision critic would never run. We gather both, merge the
     // complaints, and retry once with the union.
-    const critique = critiquePlan(req.prompt, parsed.data);
+    const critique = critiquePlan(req.prompt, plan);
     const complaints: string[] = [];
     if (!critique.ok) {
       complaints.push(
@@ -137,7 +146,7 @@ export async function planFromNLOpenAICompat(
     // Spend at most `vision.rounds` vision calls total; decrement whenever a
     // call actually completes, regardless of the blind verdict.
     if (req.vision && (req.vision.rounds ?? 1) > 0 && attempt < maxRetries) {
-      const vc = await visionCritiquePlan(req.prompt, parsed.data, {
+      const vc = await visionCritiquePlan(req.prompt, plan, {
         apiKey: req.vision.apiKey,
         ...(req.vision.baseURL ? { baseURL: req.vision.baseURL } : {}),
         model: req.vision.model,
@@ -160,7 +169,7 @@ export async function planFromNLOpenAICompat(
     }
     return {
       ok: true,
-      plan: parsed.data,
+      plan,
       inputTokens: totalIn,
       outputTokens: totalOut,
       cacheReadTokens: 0,
@@ -179,16 +188,12 @@ export async function planFromNLOpenAICompat(
 function patchSpriteAssetEnum(node: unknown, names: string[]): void {
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
-  if (
-    obj['properties'] &&
-    typeof obj['properties'] === 'object' &&
-    (obj['properties'] as Record<string, unknown>)['type'] &&
-    (obj['properties'] as Record<string, unknown>)['asset']
-  ) {
-    // Only sprite & scatter layers carry an `asset` ref; both must be
-    // constrained to the live registry names.
+  // Any object schema with an `asset` property is an asset reference (v1
+  // sprite/scatter layer, v2 sprite node) — constrain it to live registry
+  // names. (v1 keyed on `type`; v2 nodes key on `kind`, so match `asset`.)
+  if (obj['properties'] && typeof obj['properties'] === 'object') {
     const props = obj['properties'] as Record<string, unknown>;
-    props['asset'] = { type: 'string', enum: names };
+    if (props['asset']) props['asset'] = { type: 'string', enum: names };
   }
   for (const v of Object.values(obj)) {
     if (Array.isArray(v)) v.forEach((x) => patchSpriteAssetEnum(x, names));

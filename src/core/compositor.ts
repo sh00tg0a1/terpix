@@ -205,13 +205,13 @@ function attachPoint(asset: string): [number, number] {
 // Resolve a sprite that declares `on`: land its attach point on the target's
 // named point. Pure 2D placement — the target's geometry and named point
 // decide where the child sits; the child keeps its own size.
-function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
+function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number, extraDx = 0): SpriteGeom {
   const childBase = baseSpriteGeom(layer, buf, camera, tMs);
   const on = layer.on!;
   const tGeom = target.geom;
   const point = getAsset(target.layer.asset)?.metrics?.points?.[on.at] ?? [0.5, 0.5];
 
-  const fx = tGeom.cx + (point[0] - 0.5) * tGeom.size + on.dx * tGeom.size * 0.5;
+  const fx = tGeom.cx + (point[0] - 0.5) * tGeom.size + (on.dx + extraDx) * tGeom.size * 0.5;
   const fy = tGeom.cy + (point[1] - 0.5) * tGeom.size + on.dy * tGeom.size;
   const [ax, ay] = attachPoint(layer.asset);
   const size = childBase.size;
@@ -246,6 +246,28 @@ export function resolveSpriteGeoms(
     out.set(layer, g);
     if (layer.id) byId.set(layer.id, { geom: g, layer });
   }
+
+  // Auto-spread: sprites that land on the SAME target point would stack at one
+  // spot (a model often emits N separate "bowl on table" layers, all dx=0).
+  // Fan out the dx=0 members of each group evenly across the surface so they
+  // don't overlap — regardless of whether the plan used `repeat` or N nodes.
+  const autoDx = new Map<SpriteLayer, number>();
+  const groups = new Map<string, SpriteLayer[]>();
+  for (const l of pending) {
+    const k = `${l.on!.layer}::${l.on!.at}`;
+    const g = groups.get(k);
+    if (g) g.push(l);
+    else groups.set(k, [l]);
+  }
+  for (const g of groups.values()) {
+    const auto = g.filter((l) => (l.on!.dx ?? 0) === 0);
+    if (auto.length > 1) {
+      const span = 1.5; // total dx span across the surface (dx is ±1 of half-width)
+      const step = span / (auto.length - 1);
+      auto.forEach((l, i) => autoDx.set(l, (i - (auto.length - 1) / 2) * step));
+    }
+  }
+
   for (let pass = 0; pass < 4 && pending.length > 0; pass++) {
     const next: SpriteLayer[] = [];
     for (const layer of pending) {
@@ -254,7 +276,7 @@ export function resolveSpriteGeoms(
         next.push(layer);
         continue;
       }
-      const g = placeOnGeom(layer, target, buf, camera, tMs);
+      const g = placeOnGeom(layer, target, buf, camera, tMs, autoDx.get(layer) ?? 0);
       out.set(layer, g);
       if (layer.id) byId.set(layer.id, { geom: g, layer });
     }

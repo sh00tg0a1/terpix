@@ -87,7 +87,8 @@ program
   .option('--vision-model <id>', 'vision-LLM id for the in-loop frame critic (e.g. qwen-vl-plus). When set, the planner renders a preview frame, asks this model what to fix, and retries.')
   .option('--vision-rounds <n>', 'max vision-critic retries (default 1)', '1')
   .option('--visual-fewshot', 'prepend rendered reference frames + their JSON to the prompt (requires a vision-capable planner model, e.g. qwen-plus)')
-  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string; visionModel?: string; visionRounds?: string; visualFewshot?: boolean }) => {
+  .option('--gen-assets', 'generate scene-specific sprites (shape-json) for objects not in the builtin catalog before composing; --vision-model gates them for recognizability')
+  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string; visionModel?: string; visionRounds?: string; visualFewshot?: boolean; genAssets?: boolean }) => {
     let durationMs: number;
     try {
       durationMs = parseDurationMs(opts.duration);
@@ -105,6 +106,7 @@ program
       ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
       ...(opts.visionRounds ? { visionRounds: parseInt(opts.visionRounds, 10) } : {}),
       ...(opts.visualFewshot ? { visualFewShot: true } : {}),
+      ...(opts.genAssets ? { genAssets: true } : {}),
     });
   });
 

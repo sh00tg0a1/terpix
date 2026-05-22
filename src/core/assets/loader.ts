@@ -23,6 +23,10 @@ export function defaultAssetDirs(): string[] {
   const xdg = process.env['XDG_CONFIG_HOME'];
   if (xdg) dirs.push(join(xdg, 'terpix', 'assets'));
   dirs.push(join(homedir(), '.config', 'terpix', 'assets'));
+  // Generated sprites (from `plan --gen-assets`) cache here; load them so a
+  // plan that references a generated asset renders standalone.
+  const cacheBase = process.env['XDG_CACHE_HOME'] || join(homedir(), '.cache');
+  dirs.push(join(cacheBase, 'terpix', 'assets'));
   return dirs;
 }
 

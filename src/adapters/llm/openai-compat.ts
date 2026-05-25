@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Scene2 } from '../../core/scene2/schema.js';
-import { compileScene } from '../../core/scene2/compile.js';
+import { compileScene, dropUnregisteredSprites } from '../../core/scene2/compile.js';
 import { buildScenePrompt } from './scene-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
@@ -130,6 +130,8 @@ export async function planFromNLOpenAICompat(
       lastErr = `scene failed to compile: ${(err as Error).message}`;
       continue;
     }
+    const dropped = dropUnregisteredSprites(plan);
+    if (dropped > 0) process.stderr.write(`terpix plan: dropped ${dropped} layer(s) referencing unknown assets\n`);
     // Blind heuristic and vision critics are COMPLEMENTARY and run together:
     // blind catches countable/structural misses, vision catches perceptual
     // ones. Critically, vision must NOT be gated behind a blind pass — a

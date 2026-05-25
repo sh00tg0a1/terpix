@@ -1,5 +1,21 @@
 import { ScenePlan, type ScenePlanT } from '../dsl.js';
+import { getAsset } from '../assets/registry.js';
 import type { Scene2T, NodeT, RectT } from './schema.js';
+
+// Drop sprite layers whose asset is not in the registry. A model may emit a
+// hallucinated asset name despite the schema enum; without this the renderer
+// throws on the unknown asset. Call AFTER compile, once assets are registered
+// (so it stays out of the pure compiler and its tests). Shared by all planner
+// adapters.
+export function dropUnregisteredSprites(plan: ScenePlanT): number {
+  let dropped = 0;
+  for (const shot of plan.shots) {
+    const before = shot.layers.length;
+    shot.layers = shot.layers.filter((l) => l.type !== 'sprite' || getAsset(l.asset) !== undefined);
+    dropped += before - shot.layers.length;
+  }
+  return dropped;
+}
 
 // Built-in regions (fractions of the frame). Custom regions from the scene
 // override these by name.

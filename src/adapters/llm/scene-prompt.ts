@@ -11,16 +11,19 @@ const FEW_SHOT = `
 ## Examples
 
 ### Prompt: "一家人围着桌子吃年夜饭" (a family eating dinner around a table)
+Note: people listed FIRST so they sit BEHIND the table (heads/torsos show
+above it); table kept at scale 3 so it doesn't swallow them; bowls rest ON the
+table surface. Order = depth.
 \`\`\`json
 {
   "version": 2, "title": "family dinner", "fps": 24, "renderer": "half",
   "durationMs": 6000,
   "background": { "type": "gradient", "from": "#5a3220", "to": "#1c0f08", "direction": "vertical" },
   "nodes": [
-    { "kind": "sprite", "asset": "human", "repeat": 5, "scale": 2.3,
-      "place": { "in": "ground", "align": "center", "dy": -0.16 },
-      "distribute": { "layout": "row", "gap": 0.17 } },
-    { "kind": "sprite", "asset": "table", "id": "tbl", "color": "#8a5a2c", "scale": 4.0,
+    { "kind": "sprite", "asset": "human", "repeat": 4, "scale": 2.4,
+      "place": { "in": "ground", "align": "center", "dy": -0.06 },
+      "distribute": { "layout": "row", "gap": 0.22 } },
+    { "kind": "sprite", "asset": "table", "id": "tbl", "color": "#8a5a2c", "scale": 3.0,
       "place": { "in": "ground", "align": "center" } },
     { "kind": "sprite", "asset": "bowl", "repeat": 5, "scale": 1.0,
       "place": { "on": "tbl.surface" } }
@@ -64,7 +67,8 @@ export function buildScenePrompt(opts: ScenePromptOpts = {}): string {
     `Each node:`,
     `- \`kind\`: "sprite" | "text" | "particles".`,
     `- sprite: \`asset\` (exact catalog name), \`scale\` (1 ≈ 20% of frame;`,
-    `  a person at a table ~2.3, a wide table ~4), \`color\` (#RRGGBB, optional).`,
+    `  a person ~2.3, a wide table ~3 — bigger and it hides people behind it),`,
+    `  \`color\` (#RRGGBB, optional).`,
     `- text: \`content\` (UPPERCASE ASCII A-Z 0-9 space .,!? only${renderer === 'ascii' ? '; ascii renderer also draws CJK natively — keep原文' : '; TRANSLATE non-English to English, never pinyin'}), \`size\` sm|md|lg.`,
     `- particles: \`particle\` snow|rain|sparks|thrust, \`count\`.`,
     ``,
@@ -95,6 +99,17 @@ export function buildScenePrompt(opts: ScenePromptOpts = {}): string {
     `- Food/props that belong on furniture go \`on\` it, not in a region.`,
     `- People should read clearly larger than props beside them (human scale ~2–3).`,
     `- Cover the frame: a lone small subject on empty background reads as a mistake.`,
+    ``,
+    `## Occlusion — node order is depth, and a big prop HIDES what's behind it`,
+    `Nodes paint back-to-front: the FIRST node is furthest back, the LAST is in`,
+    `front. A large foreground prop drawn AFTER a subject will cover it. Two ways`,
+    `to keep subjects visible:`,
+    `- **Behind + taller**: list people BEFORE the table (people behind it) and`,
+    `  keep the table modest (scale ~3, not 4–5) so heads/torsos show above it.`,
+    `- **To the sides**: place people with \`align: "left"\`/\`"right"\` (or dx`,
+    `  ±0.3) so a centered prop never sits on top of them.`,
+    `Never stack a person at the same spot as a big table at similar scale — the`,
+    `person vanishes. This is the #1 dining-scene mistake.`,
     ``,
     `## Available sprites (exact names; aspect = W:H at scale 1)`,
     ``,

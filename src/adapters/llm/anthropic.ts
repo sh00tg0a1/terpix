@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ScenePlan } from '../../core/dsl.js';
-import { buildSystemPrompt } from './system-prompt.js';
+import { Scene2 } from '../../core/scene2/schema.js';
+import { compileScene, dropUnregisteredSprites } from '../../core/scene2/compile.js';
+import { buildScenePrompt } from './scene-prompt.js';
 import { spriteEnumForSchema } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
 import { critiquePlan, formatIssuesForRetry } from './plan-critic.js';
@@ -18,29 +19,15 @@ interface AnthropicCfg {
   defaultModel: string;
 }
 
-// Inject the current asset registry into the JSON Schema so the tool input
-// is constrained at the API level. We patch the sprite layer's `asset`
-// field to be an enum of the live registry names.
-function buildInputSchema(renderer: 'half' | 'ascii'): Record<string, unknown> {
-  const base = zodToJsonSchema(ScenePlan, { target: 'openApi3' }) as Record<string, unknown>;
-  const enumNames = spriteEnumForSchema({ renderer });
-  patchSpriteAssetEnum(base, enumNames);
-  return base;
-}
-
+// Any object schema with an `asset` property is an asset reference (the v2
+// sprite node) — constrain it to the live registry names so the API rejects
+// hallucinated assets.
 function patchSpriteAssetEnum(node: unknown, names: string[]): void {
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
-  if (
-    obj['properties'] &&
-    typeof obj['properties'] === 'object' &&
-    (obj['properties'] as Record<string, unknown>)['type'] &&
-    (obj['properties'] as Record<string, unknown>)['asset']
-  ) {
-    // Only sprite & scatter layers carry an `asset` ref; both must be
-    // constrained to the live registry names.
+  if (obj['properties'] && typeof obj['properties'] === 'object') {
     const props = obj['properties'] as Record<string, unknown>;
-    props['asset'] = { type: 'string', enum: names };
+    if (props['asset']) props['asset'] = { type: 'string', enum: names };
   }
   for (const v of Object.values(obj)) {
     if (Array.isArray(v)) v.forEach((x) => patchSpriteAssetEnum(x, names));
@@ -54,8 +41,9 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
   const maxRetries = req.maxRetries ?? (req.vision ? 5 : 3);
   const client = req.client ?? new Anthropic({ apiKey: cfg.apiKey });
 
-  const system = buildSystemPrompt({ renderer, prompt: req.prompt });
-  const inputSchema = buildInputSchema(renderer);
+  const system = buildScenePrompt({ renderer });
+  const schema = zodToJsonSchema(Scene2, { target: 'openApi3' }) as Record<string, unknown>;
+  patchSpriteAssetEnum(schema, spriteEnumForSchema({ renderer }));
 
   const sizeHint = req.size ? ` Target canvas: ${req.size.w}x${req.size.h} cells.` : '';
   const styleHint = req.style ? ` Style preset: ${req.style}.` : '';
@@ -76,22 +64,20 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
         ? baseUserMsg
         : baseUserMsg +
           `\n\nThe previous attempt was rejected. Reasons:\n${lastErr}\n\n` +
-          `Re-emit a corrected plan. Use only listed asset names and field shapes; ` +
+          `Re-emit a corrected scene. Use only listed asset names and field shapes; ` +
           `address each numbered issue above.`;
     let resp: Awaited<ReturnType<typeof client.messages.create>>;
     try {
       resp = await client.messages.create({
         model,
         max_tokens: 4096,
-        system: [
-          { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
-        ],
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
         tools: [
           {
             name: 'submit_plan',
             description:
-              'Submit the final ScenePlan v1 JSON for rendering. Call exactly once with the plan as the tool input.',
-            input_schema: inputSchema as Anthropic.Messages.Tool.InputSchema,
+              'Submit the final Scene v2 (relational scene) JSON. Call exactly once with the scene as the tool input.',
+            input_schema: schema as Anthropic.Messages.Tool.InputSchema,
           },
         ],
         tool_choice: { type: 'tool', name: 'submit_plan' },
@@ -117,7 +103,7 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
       lastErr = 'LLM did not call submit_plan';
       continue;
     }
-    const parsed = ScenePlan.safeParse(tool.input);
+    const parsed = Scene2.safeParse(tool.input);
     if (!parsed.success) {
       lastErr = parsed.error.issues
         .slice(0, 8)
@@ -125,31 +111,50 @@ export async function planFromNLAnthropic(req: PlanReq, cfg: AnthropicCfg): Prom
         .join('; ');
       continue;
     }
-    const critique = critiquePlan(req.prompt, parsed.data);
-    if (!critique.ok && attempt < maxRetries) {
-      lastErr =
-        `the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`;
+    // Compile the relational scene to a v1 plan; critics + render run on it.
+    let plan;
+    try {
+      plan = compileScene(parsed.data);
+    } catch (err) {
+      lastErr = `scene failed to compile: ${(err as Error).message}`;
       continue;
     }
+    const dropped = dropUnregisteredSprites(plan);
+    if (dropped > 0) process.stderr.write(`terpix plan: dropped ${dropped} layer(s) referencing unknown assets\n`);
+    // Blind heuristic and vision critics are COMPLEMENTARY and run together:
+    // blind catches countable/structural misses, vision catches perceptual
+    // ones. Vision is not gated behind a blind pass — we gather both and retry
+    // once with the union of complaints.
+    const critique = critiquePlan(req.prompt, plan);
+    const complaints: string[] = [];
+    if (!critique.ok) {
+      complaints.push(`the plan parses but does not match the prompt:\n${formatIssuesForRetry(critique)}`);
+    }
     if (req.vision && (req.vision.rounds ?? 1) > 0 && attempt < maxRetries) {
-      const vc = await visionCritiquePlan(req.prompt, parsed.data, {
+      const vc = await visionCritiquePlan(req.prompt, plan, {
         apiKey: req.vision.apiKey,
         ...(req.vision.baseURL ? { baseURL: req.vision.baseURL } : {}),
         model: req.vision.model,
       });
       if ('error' in vc) {
         process.stderr.write(`terpix plan: vision critic skipped: ${vc.error}\n`);
-      } else if (!vc.ok) {
-        lastErr =
-          `a vision review of the rendered preview frame flagged these ` +
-          `issues:\n${formatVisionIssuesForRetry(vc)}`;
+      } else {
         req.vision = { ...req.vision, rounds: (req.vision.rounds ?? 1) - 1 };
-        continue;
+        if (!vc.ok) {
+          complaints.push(
+            `a vision review of the rendered preview frame flagged these ` +
+              `issues:\n${formatVisionIssuesForRetry(vc)}`,
+          );
+        }
       }
+    }
+    if (complaints.length > 0 && attempt < maxRetries) {
+      lastErr = complaints.join('\n\n');
+      continue;
     }
     return {
       ok: true,
-      plan: parsed.data,
+      plan,
       inputTokens: totalIn,
       outputTokens: totalOut,
       cacheReadTokens: totalCacheRead,

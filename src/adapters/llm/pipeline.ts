@@ -111,18 +111,8 @@ export async function planScenePipeline(req: PlanReq, cfg: PipelineCfg): Promise
     }
   }
 
-  // Compose: the v2 planner now sees generated assets in its catalog.
-  const result = await planFromNLOpenAICompat(req, cfg);
-  if (!result.ok) return result;
-
-  // Safety net: a model may reference an asset that was skipped (failed its
-  // recognizability gate) despite the schema enum. Drop such layers so the
-  // render never throws on an unknown asset.
-  for (const shot of result.plan.shots) {
-    const before = shot.layers.length;
-    shot.layers = shot.layers.filter((l) => l.type !== 'sprite' || getAsset(l.asset) !== undefined);
-    const dropped = before - shot.layers.length;
-    if (dropped > 0) process.stderr.write(`terpix plan: dropped ${dropped} layer(s) referencing unavailable assets\n`);
-  }
-  return result;
+  // Compose: the v2 planner now sees generated assets in its catalog. The
+  // adapter already drops layers referencing unknown assets (shared safety
+  // net), covering elements that failed their recognizability gate.
+  return await planFromNLOpenAICompat(req, cfg);
 }

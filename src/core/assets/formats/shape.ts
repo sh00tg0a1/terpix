@@ -1,8 +1,15 @@
 import { z } from 'zod';
 import { fillCircle, fillRect, fillTriangle, setPixel } from '../../pixel.js';
-import type { DrawCtx } from '../registry.js';
+import { setCell } from '../../char-grid.js';
+import { shade } from '../../color.js';
+import type { AsciiDrawCtx, DrawCtx } from '../registry.js';
 
-const HexOrPlaceholder = z.string().regex(/^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})|@main)$/);
+// `@main` = the layer color; the tone tokens derive shadow/highlight variants
+// from it so a shape sprite reads with volume but still recolors as a whole
+// when the plan changes layer.color.
+const HexOrPlaceholder = z
+  .string()
+  .regex(/^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})|@main|@light|@lighter|@dark|@darker)$/);
 const Point = z.tuple([z.number(), z.number()]);
 
 const Rect = z.object({
@@ -61,6 +68,10 @@ export const ShapeAssetFile = z.object({
   // objects (bowls, plates, furniture); 'center' for floating/round things.
   anchor: z.enum(['center', 'bottom']).default('center'),
   primitives: z.array(Primitive).min(1).max(64),
+  // Optional hand-drawn ascii art (rows). When present the ascii renderer
+  // blits this fixed-size glyph instead of the auto silhouette — clearer for
+  // small recognizable objects. ' ' and '@' are transparent.
+  ascii: z.array(z.string().max(40)).max(24).optional(),
 });
 
 export type ShapeAssetFileT = z.infer<typeof ShapeAssetFile>;
@@ -82,8 +93,20 @@ function hexToRgb(hex: string): RGB {
   return { r: r * 17, g: g * 17, b: b * 17 };
 }
 
+const TONE_FACTOR: Record<string, number> = {
+  '@lighter': 1.5,
+  '@light': 1.25,
+  '@dark': 0.62,
+  '@darker': 0.42,
+};
+
 function resolveColor(token: string, main: [number, number, number]): RGB {
   if (token === '@main') return { r: main[0], g: main[1], b: main[2] };
+  const f = TONE_FACTOR[token];
+  if (f !== undefined) {
+    const [r, g, b] = shade(main, f);
+    return { r, g, b };
+  }
   return hexToRgb(token);
 }
 
@@ -181,38 +204,86 @@ export function makeShapeDrawer(spec: ShapeAssetFileT): (ctx: DrawCtx) => void {
     const offX = ctx.cx - (viewBox.w * scale) / 2;
     const offY = ctx.cy - (viewBox.h * scale) / 2;
     const alpha = Math.round(255 * (ctx.opacity ?? 1));
-    const project = (px: number, py: number): [number, number] => [offX + px * scale, offY + py * scale];
-    for (const prim of primitives) drawPrimitive(ctx, prim, project, scale, ctx.color, alpha);
+    // `rotation` is in degrees, clockwise, about the sprite center (cx, cy).
+    const rot = ((ctx.rotation ?? 0) * Math.PI) / 180;
+    const rotating = rot !== 0;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    // viewBox point → screen, with optional rotation about the center.
+    const tf = (px: number, py: number): [number, number] => {
+      const sx = offX + px * scale;
+      const sy = offY + py * scale;
+      if (!rotating) return [sx, sy];
+      const dx = sx - ctx.cx;
+      const dy = sy - ctx.cy;
+      return [ctx.cx + dx * cos - dy * sin, ctx.cy + dx * sin + dy * cos];
+    };
+    for (const prim of primitives) drawPrimitive(ctx, prim, tf, scale, rotating, ctx.color, alpha);
   };
+}
+
+// Sample an axis-aligned ellipse (viewBox coords) as an N-gon so it can be
+// rotated and filled as a polygon.
+function ellipsePolygon(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  tf: (x: number, y: number) => [number, number],
+  n = 24,
+): Array<[number, number]> {
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push(tf(cx + rx * Math.cos(a), cy + ry * Math.sin(a)));
+  }
+  return pts;
 }
 
 function drawPrimitive(
   ctx: DrawCtx,
   prim: PrimitiveT,
-  project: (x: number, y: number) => [number, number],
+  tf: (x: number, y: number) => [number, number],
   scale: number,
+  rotating: boolean,
   main: [number, number, number],
   alpha: number,
 ): void {
   const color = resolveColor(prim.color, main);
   switch (prim.kind) {
     case 'rect': {
-      const [x, y] = project(prim.x, prim.y);
-      fillRect(ctx.buf, x, y, prim.w * scale, prim.h * scale, color.r, color.g, color.b, alpha);
+      if (rotating) {
+        // Axis-aligned fill can't rotate; emit the 4 corners as a polygon.
+        const corners: Array<[number, number]> = [
+          tf(prim.x, prim.y),
+          tf(prim.x + prim.w, prim.y),
+          tf(prim.x + prim.w, prim.y + prim.h),
+          tf(prim.x, prim.y + prim.h),
+        ];
+        drawPolygonScanline(ctx, corners, color, alpha);
+      } else {
+        const [x, y] = tf(prim.x, prim.y);
+        fillRect(ctx.buf, x, y, prim.w * scale, prim.h * scale, color.r, color.g, color.b, alpha);
+      }
       return;
     }
     case 'circle': {
-      const [cx, cy] = project(prim.cx, prim.cy);
+      // A circle is rotation-invariant: just move its center.
+      const [cx, cy] = tf(prim.cx, prim.cy);
       fillCircle(ctx.buf, cx, cy, prim.r * scale, color.r, color.g, color.b, alpha);
       return;
     }
     case 'ellipse': {
-      const [cx, cy] = project(prim.cx, prim.cy);
-      drawEllipseScanline(ctx, cx, cy, prim.rx * scale, prim.ry * scale, color, alpha);
+      if (rotating) {
+        drawPolygonScanline(ctx, ellipsePolygon(prim.cx, prim.cy, prim.rx, prim.ry, tf), color, alpha);
+      } else {
+        const [cx, cy] = tf(prim.cx, prim.cy);
+        drawEllipseScanline(ctx, cx, cy, prim.rx * scale, prim.ry * scale, color, alpha);
+      }
       return;
     }
     case 'triangle': {
-      const [p0, p1, p2] = prim.points.map(([x, y]) => project(x, y)) as [
+      const [p0, p1, p2] = prim.points.map(([x, y]) => tf(x, y)) as [
         [number, number],
         [number, number],
         [number, number],
@@ -225,17 +296,108 @@ function drawPrimitive(
       return;
     }
     case 'line': {
-      const [fx, fy] = project(prim.from[0], prim.from[1]);
-      const [tx, ty] = project(prim.to[0], prim.to[1]);
+      const [fx, fy] = tf(prim.from[0], prim.from[1]);
+      const [tx, ty] = tf(prim.to[0], prim.to[1]);
       drawBresenhamLine(ctx, fx, fy, tx, ty, prim.thickness, color, alpha);
       return;
     }
     case 'polygon': {
-      const pts = prim.points.map(([x, y]) => project(x, y)) as Array<[number, number]>;
+      const pts = prim.points.map(([x, y]) => tf(x, y)) as Array<[number, number]>;
       drawPolygonScanline(ctx, pts, color, alpha);
       return;
     }
   }
+}
+
+// Is viewBox point (vx, vy) inside the filled area of any primitive? Used to
+// rasterize a shape into the coarse ascii char grid as a solid silhouette.
+function pointInPrimitives(prims: PrimitiveT[], vx: number, vy: number): boolean {
+  for (const p of prims) {
+    switch (p.kind) {
+      case 'rect':
+        if (vx >= p.x && vx <= p.x + p.w && vy >= p.y && vy <= p.y + p.h) return true;
+        break;
+      case 'circle': {
+        const dx = vx - p.cx;
+        const dy = vy - p.cy;
+        if (dx * dx + dy * dy <= p.r * p.r) return true;
+        break;
+      }
+      case 'ellipse': {
+        const dx = (vx - p.cx) / p.rx;
+        const dy = (vy - p.cy) / p.ry;
+        if (dx * dx + dy * dy <= 1) return true;
+        break;
+      }
+      case 'triangle':
+        if (pointInPoly(p.points, vx, vy)) return true;
+        break;
+      case 'polygon':
+        if (pointInPoly(p.points, vx, vy)) return true;
+        break;
+      case 'line':
+        break; // strokes don't contribute to the silhouette
+    }
+  }
+  return false;
+}
+
+function pointInPoly(pts: ReadonlyArray<readonly [number, number]>, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i]![0];
+    const yi = pts[i]![1];
+    const xj = pts[j]![0];
+    const yj = pts[j]![1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// Blit fixed-size ascii art centered at (cx,cy). ' '/'@' = transparent.
+function blitArt(ctx: AsciiDrawCtx, art: string[]): void {
+  const h = art.length;
+  const w = art.reduce((m, l) => Math.max(m, l.length), 0);
+  const x0 = Math.floor(ctx.cx - w / 2);
+  const y0 = Math.floor(ctx.cy - h / 2);
+  const [r, g, b] = ctx.color;
+  for (let y = 0; y < h; y++) {
+    const line = art[y]!;
+    for (let x = 0; x < line.length; x++) {
+      const ch = line.charCodeAt(x);
+      if (ch === 0x20 || ch === 0x40) continue;
+      setCell(ctx.buf, x0 + x, y0 + y, ch, r, g, b);
+    }
+  }
+}
+
+// Ascii drawer for a shape asset: prefer hand-drawn `ascii` art (fixed size,
+// recognizable); otherwise rasterize a solid silhouette from the primitives.
+// ascii cells are ~2× taller than wide, so columns get a 2× factor. Silhouette
+// height is capped so a large `scale` can't fill the screen with one blob.
+export function makeShapeAsciiDrawer(spec: ShapeAssetFileT): (ctx: AsciiDrawCtx) => void {
+  const { viewBox, primitives, ascii } = spec;
+  const aspect = viewBox.w / viewBox.h;
+  return function drawShapeAscii(ctx: AsciiDrawCtx): void {
+    if (ascii && ascii.length > 0) {
+      blitArt(ctx, ascii);
+      return;
+    }
+    const rows = Math.min(8, Math.max(2, Math.round(ctx.size)));
+    const cols = Math.max(2, Math.round(rows * aspect * 2));
+    const x0 = Math.floor(ctx.cx - cols / 2);
+    const y0 = Math.floor(ctx.cy - rows / 2);
+    const [r, g, b] = ctx.color;
+    for (let row = 0; row < rows; row++) {
+      const vy = ((row + 0.5) / rows) * viewBox.h;
+      for (let col = 0; col < cols; col++) {
+        const vx = ((col + 0.5) / cols) * viewBox.w;
+        if (pointInPrimitives(primitives, vx, vy)) {
+          setCell(ctx.buf, x0 + col, y0 + row, 0x2588, r, g, b); // █ full block
+        }
+      }
+    }
+  };
 }
 
 export function parseShapeJson(text: string, source = '<shape>'):

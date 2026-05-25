@@ -8,7 +8,18 @@ import { drawTree } from './tree.js';
 import { drawSuperman } from './superman.js';
 import { drawHuman } from './human.js';
 import { drawTable } from './table.js';
-import { drawStarAscii, drawDroidAscii, drawHumanAscii } from './ascii-art.js';
+import {
+  drawStarAscii,
+  drawDroidAscii,
+  drawHumanAscii,
+  drawPlanetAscii,
+  drawMoonAscii,
+  drawMountainAscii,
+  drawTreeAscii,
+  drawSpaceshipAscii,
+  drawSupermanAscii,
+  drawTableAscii,
+} from './ascii-art.js';
 
 export function registerBuiltins(): void {
   if (getAsset('spaceship')?.source === 'builtin') return;
@@ -18,6 +29,7 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.2, anchor: 'center' },
     draw: drawSpaceship,
+    drawAscii: drawSpaceshipAscii,
   });
   registerAsset({
     name: 'planet',
@@ -25,6 +37,7 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.0, anchor: 'center' },
     draw: drawPlanet,
+    drawAscii: drawPlanetAscii,
   });
   registerAsset({
     name: 'moon',
@@ -32,6 +45,7 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.0, anchor: 'center' },
     draw: drawMoon,
+    drawAscii: drawMoonAscii,
   });
   registerAsset({
     name: 'star',
@@ -65,6 +79,7 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.0, anchor: 'bottom' },
     draw: drawMountain,
+    drawAscii: drawMountainAscii,
   });
   registerAsset({
     name: 'tree',
@@ -72,6 +87,7 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 0.6, anchor: 'bottom' },
     draw: drawTree,
+    drawAscii: drawTreeAscii,
   });
   registerAsset({
     name: 'superman',
@@ -79,12 +95,15 @@ export function registerBuiltins(): void {
     source: 'builtin',
     metrics: { aspect: 1.0, anchor: 'center' },
     draw: drawSuperman,
+    drawAscii: drawSupermanAscii,
   });
   registerAsset({
     name: 'table',
-    description: 'a simple side-on table: flat top surface on two legs (use for dining / interior scenes; rest food sprites just above its top)',
+    description:
+      'a flat side-on table: a top surface on two legs. Use for dining / interior scenes and place food sprites ON it with `on: { layer: <table id>, at: "surface" }` (spread copies with dx).',
     source: 'builtin',
-    metrics: { aspect: 2.0, anchor: 'bottom' },
+    metrics: { aspect: 2.0, anchor: 'bottom', points: { surface: [0.5, 0.38] } },
     draw: drawTable,
+    drawAscii: drawTableAscii,
   });
 }

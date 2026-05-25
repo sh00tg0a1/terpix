@@ -3,8 +3,22 @@ import { ScenePlan } from '../src/core/dsl.js';
 import { compositeAscii } from '../src/core/compositor-ascii.js';
 import { AsciiEncoder } from '../src/adapters/terminal/ascii.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
+import { registerAsset, getAsset } from '../src/core/assets/registry.js';
+import { loadUserAssets } from '../src/core/assets/loader.js';
 
-beforeAll(() => registerBuiltins());
+beforeAll(() => {
+  registerBuiltins();
+  loadUserAssets(); // bowl/cat/steam shape assets (get an ascii silhouette/art)
+  // An asset with a pixel drawer but no ascii representation, to exercise the
+  // ascii-renderer fallback error. (All shipped assets now have drawAscii.)
+  registerAsset({
+    name: 'noascii',
+    description: 'test asset with no ascii drawer',
+    source: 'plugin',
+    metrics: { aspect: 1, anchor: 'center' },
+    draw: () => {},
+  });
+});
 
 const basePlan = {
   version: 1 as const,
@@ -75,6 +89,103 @@ describe('ascii renderer', () => {
     expect(s).toMatch(/I/);
   });
 
+  it('renders CJK text natively into the char grid (wide cells + trailing sentinel)', async () => {
+    const cjkPlan = ScenePlan.parse({
+      ...basePlan,
+      shots: [
+        {
+          ...basePlan.shots[0],
+          layers: [
+            {
+              type: 'text' as const,
+              content: '真好吃',
+              style: 'static' as const,
+              color: '#ffffff',
+              size: 'md' as const,
+              position: { x: 0.5, y: 0.5 },
+            },
+          ],
+        },
+      ],
+    });
+    const frames = [];
+    for await (const f of compositeAscii(cjkPlan, { w: 40, h: 10, fps: 12 })) frames.push(f);
+    const frame = frames[0]!;
+    const y = Math.floor(0.5 * 10);
+    const startX = Math.floor(40 * 0.5 - 3 /* displayWidth("真好吃")=6 */);
+    // First glyph at startX, its trailing column is the WIDE_TRAIL sentinel.
+    expect(frame.chars[y * 40 + startX]).toBe('真'.charCodeAt(0));
+    expect(frame.chars[y * 40 + startX + 1]).toBe(0x0001);
+    expect(frame.chars[y * 40 + startX + 2]).toBe('好'.charCodeAt(0));
+    expect(frame.chars[y * 40 + startX + 4]).toBe('吃'.charCodeAt(0));
+    // Encoder emits the multi-byte UTF-8 for the CJK chars and the round-trip
+    // string contains them (the sentinel produces no output).
+    const s = new TextDecoder().decode(new AsciiEncoder().encode(frame));
+    expect(s).toContain('真好吃');
+  });
+
+  it('all builtin sprites now have an ascii drawer', () => {
+    for (const name of ['spaceship', 'planet', 'moon', 'star', 'human', 'mountain', 'tree', 'superman', 'table']) {
+      expect(getAsset(name)?.drawAscii, name).toBeTypeOf('function');
+    }
+  });
+
+  it('a dining scene (table + bowl scatter + human) renders in ascii without throwing', async () => {
+    const diningPlan = ScenePlan.parse({
+      ...basePlan,
+      shots: [
+        {
+          ...basePlan.shots[0],
+          layers: [
+            { type: 'sprite' as const, asset: 'table', color: '#b07840', ease: 'linear' as const,
+              keyframes: [{ tMs: 0, x: 0.5, y: 0.78, scale: 3 }] },
+            { type: 'sprite' as const, asset: 'human', color: '#e0875a', ease: 'linear' as const,
+              keyframes: [{ tMs: 0, x: 0.12, y: 0.72, scale: 3 }] },
+            { type: 'scatter' as const, asset: 'bowl', color: '#e04030', count: 5,
+              area: { x0: 0.34, y0: 0.62, x1: 0.66, y1: 0.62 }, scale: 1, scaleJitter: 0, depth0: 0, depth1: 0, seed: 3 },
+          ],
+        },
+      ],
+    });
+    let frame;
+    for await (const f of compositeAscii(diningPlan, { w: 60, h: 22, fps: 12 })) { frame = f; break; }
+    // bowl art top row starts with '.', so at least one '.' (0x2e) cell exists.
+    const dots = [...frame!.chars].filter((c) => c === 0x2e).length;
+    expect(dots).toBeGreaterThan(0);
+  });
+
+  it('iso camera recedes a deep sprite up the char grid', async () => {
+    function topRow(frame: { chars: Uint16Array; w: number; h: number }): number {
+      for (let y = 0; y < frame.h; y++) {
+        for (let x = 0; x < frame.w; x++) {
+          if (frame.chars[y * frame.w + x] !== 0) return y;
+        }
+      }
+      return frame.h;
+    }
+    const make = (iso: boolean) =>
+      ScenePlan.parse({
+        ...basePlan,
+        ...(iso ? { camera: { projection: 'iso' as const, tilt: 0.6 } } : {}),
+        shots: [
+          {
+            ...basePlan.shots[0],
+            layers: [
+              { type: 'sprite' as const, asset: 'human', color: '#ffffff', ease: 'linear' as const,
+                keyframes: [{ tMs: 0, x: 0.5, y: 0.8, scale: 2, depth: iso ? 1 : 0 }] },
+            ],
+          },
+        ],
+      });
+    const grab = async (iso: boolean) => {
+      for await (const f of compositeAscii(make(iso), { w: 40, h: 24, fps: 12 })) return f;
+      throw new Error('no frame');
+    };
+    const flat = await grab(false);
+    const isoF = await grab(true);
+    expect(topRow(isoF)).toBeLessThan(topRow(flat)); // receded upward
+  });
+
   it('sprite layer without drawAscii throws helpful error', async () => {
     const badPlan = ScenePlan.parse({
       ...basePlan,
@@ -84,7 +195,7 @@ describe('ascii renderer', () => {
           layers: [
             {
               type: 'sprite' as const,
-              asset: 'mountain',
+              asset: 'noascii',
               color: '#cccccc',
               ease: 'linear' as const,
               keyframes: [{ tMs: 0, x: 0.5, y: 0.5 }],

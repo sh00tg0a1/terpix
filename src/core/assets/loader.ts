@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { homedir } from 'node:os';
-import { makeShapeDrawer, parseShapeJson } from './formats/shape.js';
+import { makeShapeAsciiDrawer, makeShapeDrawer, parseShapeJson } from './formats/shape.js';
 import { registerAsset } from './registry.js';
 
 export interface LoadReport {
@@ -23,6 +23,10 @@ export function defaultAssetDirs(): string[] {
   const xdg = process.env['XDG_CONFIG_HOME'];
   if (xdg) dirs.push(join(xdg, 'terpix', 'assets'));
   dirs.push(join(homedir(), '.config', 'terpix', 'assets'));
+  // Generated sprites (from `plan --gen-assets`) cache here; load them so a
+  // plan that references a generated asset renders standalone.
+  const cacheBase = process.env['XDG_CACHE_HOME'] || join(homedir(), '.cache');
+  dirs.push(join(cacheBase, 'terpix', 'assets'));
   return dirs;
 }
 
@@ -69,6 +73,7 @@ function loadShapeFile(path: string, report: LoadReport): void {
     origin: path,
     metrics: { aspect: spec.viewBox.w / spec.viewBox.h, anchor: spec.anchor },
     draw: makeShapeDrawer(spec),
+    drawAscii: makeShapeAsciiDrawer(spec),
   });
   report.loaded.push({ name: spec.name, source: 'shape', origin: path });
 }

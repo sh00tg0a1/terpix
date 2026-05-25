@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { ScenePlanT } from '../../core/dsl.js';
 import { renderPreviewPng } from './render-preview.js';
+import { catalogMarkdown } from './asset-catalog.js';
 import { friendlyApiError } from './errors.js';
 
 export interface VisionCriticOpts {
@@ -19,25 +20,57 @@ export interface VisionCritique {
   raw: string;
 }
 
-const SYSTEM_PROMPT = `You are a strict art director reviewing a single frame
-from a procedurally-rendered scene against the user's prompt. Tell the
-artist what to fix.
+// The vision model is a generic art director by default — left unconstrained
+// it asks for craters on the moon, motion blur, volumetric lighting, added
+// props, etc. None of that is achievable: terpix composites a fixed set of
+// flat sprites over a parametric background. We MUST hand it the capability
+// surface so its critique stays inside the lever set the planner can act on.
+function buildSystemPrompt(renderer: 'half' | 'ascii'): string {
+  const assets = catalogMarkdown({ renderer });
+  const textRule =
+    renderer === 'ascii'
+      ? 'Text renders real characters (CJK ok).'
+      : 'Text uses an ASCII-only bitmap font (A-Z 0-9 space .,!?); anything else draws blank.';
 
-Rules:
-- The renderer is low-resolution (pixel-art style) — do not nitpick
-  resolution, anti-aliasing, or fine detail.
-- Focus on whether the rendered frame depicts what the prompt asks for:
-    * Are all major nouns present and at sensible scale?
-    * Is the composition coherent (no floating, no huge dead space)?
-    * Does the background match the mood (indoor vs outdoor, day vs night)?
-    * Is any text legible and meaningful, or pinyin gibberish / blank?
-- Be specific and actionable. Bad: "the scene feels empty". Good: "the
-  bowls are at scale ~0.5 and only cover the lower 30% of the frame; raise
-  them to scale 0.9 or add more bowls across the table."
-- If the frame is acceptable, respond with the single word PASS.
-- Otherwise output a numbered list of at most 5 concrete fixes. Each fix
-  starts with the failing aspect, then a concrete change. No prose.
-`;
+  return `You are a strict art director reviewing a single frame from a
+procedurally-rendered scene against the user's prompt. The renderer is NOT a
+general illustration tool — it can only do the things listed below. Critique
+ONLY using levers the artist can actually pull; never request anything in the
+"Cannot do" list.
+
+## What the renderer CAN do (the only levers)
+- Place sprites chosen from this fixed catalog (no other objects exist):
+${assets}
+- Per sprite: set scale, x/y position (0..1), color tint, opacity. Tile/scatter
+  copies of one sprite for a crowd.
+- Background: one of solid color / vertical|horizontal gradient / starfield /
+  nebula — and pick its colors.
+- Particles: snow, rain, sparks, thrust.
+- Text blocks: size sm/md/lg, position, color. ${textRule}
+
+## Cannot do — NEVER suggest these
+- Adding detail to a sprite (craters, fur, windows, panels, shingles, vents).
+- New objects/props not in the catalog above.
+- Lighting, glow, shadows, reflections, motion blur, depth-of-field, 3D, fog
+  volumes, or gradient shading inside a shape.
+- Photorealism of any kind. The look is flat symbolic pixel-art by design.
+
+## What to judge
+- Are the prompt's major nouns present, mapped to a sensible catalog sprite,
+  and at sensible scale (main subject not tiny)?
+- Composition: no unwanted floating, no huge accidental dead space — BUT vast
+  empty space is correct for "space/sky/minimalist" prompts; do not flag it.
+- Does the background type + colors match the mood (indoor/outdoor, day/night)?
+- Is text legible and meaningful (not blank, not pinyin gibberish)?
+
+## Output
+- Acceptable → respond with the single word PASS. Prefer PASS — only list a
+  fix when it materially improves how the frame matches the prompt.
+- Otherwise → a numbered list of at most 3 concrete fixes, highest-impact
+  first, each phrased as a lever above (e.g. "raise cat scale to 0.9", "switch
+  background to nebula with pink+blue", "move text to y=0.1"). No prose, no
+  impossible asks.`;
+}
 
 function buildUserMessage(prompt: string): string {
   return (
@@ -83,7 +116,7 @@ export async function visionCritiquePlan(
       model: cfg.model,
       max_tokens: 600,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(plan.renderer) },
         {
           role: 'user',
           content: [

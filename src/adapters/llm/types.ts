@@ -30,6 +30,13 @@ export interface PlanReq {
    * (qwen-plus, qwen-vl-*, gpt-4o, etc.).
    */
   visualFewShot?: boolean;
+  /**
+   * When true, run the asset-generation pipeline first: plan the scene's
+   * elements, generate (+ vision-gate, if a vision model is set) any not in
+   * the registry as procedural shape sprites, cache them, then compose. Lets
+   * scenes depict objects beyond the fixed builtin catalog.
+   */
+  genAssets?: boolean;
   // Test injection points.
   client?: Anthropic;
   openaiClient?: OpenAI;

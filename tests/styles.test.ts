@@ -25,6 +25,13 @@ describe('styles', () => {
       expect(cfg.edgeOnly).toBe(false);
       expect(cfg.forceBackground).toBe('#f6f3ec');
     });
+
+    it('lineart is edge-only ink-on-paper (outlines)', () => {
+      const cfg = resolveStyle('lineart');
+      expect(cfg.edgeOnly).toBe(true);
+      expect(cfg.paletteColors).toEqual(['#f7f4ec', '#14181f']);
+      expect(cfg.forceBackground).toBe('#f7f4ec');
+    });
   });
 
   describe('applyStyle duotone', () => {

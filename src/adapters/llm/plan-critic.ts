@@ -39,8 +39,11 @@ const QUANTIFIERS: CountWord[] = [
   { pattern: /\b(four|4)\b|四个|四/, count: 4 },
   { pattern: /\b(five|5)\b|五个|五/, count: 5 },
   {
+    // Crowd words. NOTE: only `一桌` (a table-FULL of) counts as a crowd —
+    // bare `桌` is furniture and used to false-fire on `木桌`, inflating an
+    // unrelated noun ("木桌上的一只猫" → 5 cats). Keep `一桌`, drop bare `桌`.
     pattern:
-      /\b(many|several|crowd|group|flock|fleet|forest|bunch|row of|pile of|lots of|set of)\b|桌|群|众|排|堆|一桌|一片|一群|一排/i,
+      /\b(many|several|crowd|group|flock|fleet|forest|bunch|row of|pile of|lots of|set of)\b|群|众|排|堆|一桌|一片|一群|一排/i,
     count: 5,
   },
 ];
@@ -109,19 +112,47 @@ function maxScale(layer: Extract<LayerT, { type: 'sprite' }>): number {
   return m || 1;
 }
 
+// A flattened "one asset instance" view across BOTH sprite and scatter
+// layers. A scatter with count=5 contributes 5 units, so coverage and
+// frame-fill checks see the instances the renderer will actually draw.
+interface CoverUnit {
+  asset: string;
+  scale: number;
+  y: number | undefined;
+}
+
+function coverageUnits(plan: ScenePlanT): CoverUnit[] {
+  const out: CoverUnit[] = [];
+  for (const shot of plan.shots) {
+    for (const layer of shot.layers) {
+      if (layer.type === 'sprite') {
+        out.push({ asset: layer.asset, scale: maxScale(layer), y: layer.keyframes[0]?.y });
+      } else if (layer.type === 'scatter') {
+        const midY = (layer.area.y0 + layer.area.y1) / 2;
+        for (let i = 0; i < layer.count; i++) {
+          out.push({ asset: layer.asset, scale: layer.scale, y: midY });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
   const issues: CriticIssue[] = [];
   const sprites = spriteLayers(plan);
+  const units = coverageUnits(plan);
   const nouns = extractNouns(prompt);
 
-  // Coverage: each noun must have ≥ count sprites whose asset is in candidates.
-  // Sprites can satisfy at most one noun (greedy).
+  // Coverage: each noun must have ≥ count instances whose asset is in
+  // candidates. Counts sprite layers AND scatter instances. Each unit
+  // satisfies at most one noun (greedy).
   const used = new Set<number>();
   for (const noun of nouns) {
     let matched = 0;
-    for (let i = 0; i < sprites.length; i++) {
+    for (let i = 0; i < units.length; i++) {
       if (used.has(i)) continue;
-      if (noun.candidates.includes(sprites[i]!.asset)) {
+      if (noun.candidates.includes(units[i]!.asset)) {
         used.add(i);
         matched++;
         if (matched >= noun.count) break;
@@ -208,13 +239,12 @@ export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
   // < 0.3, the scene reads as empty. Approximate width per sprite as
   // 0.11 × scale × max(aspect, 1).
   let totalWidthFrac = 0;
-  for (const layer of sprites) {
-    const entry = getAsset(layer.asset);
+  for (const unit of units) {
+    const entry = getAsset(unit.asset);
     const aspect = entry?.metrics?.aspect ?? 1;
-    const s = maxScale(layer);
-    totalWidthFrac += 0.11 * s * Math.max(aspect, 1);
+    totalWidthFrac += 0.11 * unit.scale * Math.max(aspect, 1);
   }
-  if (sprites.length > 0 && totalWidthFrac < 0.3) {
+  if (units.length > 0 && totalWidthFrac < 0.3) {
     issues.push({
       rule: 'empty-frame',
       detail:
@@ -299,11 +329,13 @@ export function critiquePlan(prompt: string, plan: ScenePlanT): CriticResult {
     }
   }
 
-  // Text content must be renderable: only A-Z, 0-9, space, and `.,!?`.
-  // Anything else (lowercase, CJK, symbols) draws as a blank slot — so a
-  // text layer with non-ASCII content is the same as no text at all.
+  // Text content must be renderable. The `half` renderer rasterizes text with
+  // an ASCII-only bitmap font (A-Z, 0-9, space, `.,!?`), so anything else
+  // draws blank. The `ascii` renderer emits real characters to the terminal,
+  // which renders CJK natively — so this restriction only applies to `half`.
   const TEXT_OK = /^[A-Z0-9 .,!?]+$/;
   for (const shot of plan.shots) {
+    if (plan.renderer === 'ascii') break;
     for (const layer of shot.layers) {
       if (layer.type !== 'text') continue;
       if (!TEXT_OK.test(layer.content)) {

@@ -10,6 +10,7 @@ import {
 } from '../../core/config.js';
 import { planFromNLAnthropic } from './anthropic.js';
 import { planFromNLOpenAICompat } from './openai-compat.js';
+import { planScenePipeline } from './pipeline.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
 
 const MINIMAX_BASE_URL = 'https://api.minimax.io/v1';
@@ -94,12 +95,16 @@ export async function planFromNL(req: PlanReq & { provider?: ProviderNameT }): P
     case 'openai':
     case 'minimax':
     case 'qwen':
-    case 'openai-compat':
-      return planFromNLOpenAICompat(req, {
+    case 'openai-compat': {
+      const compatCfg = {
         apiKey: resolved.apiKey,
         defaultModel: resolved.defaultModel,
         ...(resolved.baseURL ? { baseURL: resolved.baseURL } : {}),
-      });
+      };
+      return req.genAssets
+        ? planScenePipeline(req, compatCfg)
+        : planFromNLOpenAICompat(req, compatCfg);
+    }
   }
 }
 

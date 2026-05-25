@@ -11,6 +11,7 @@ export interface PlanCommandOpts {
   visionModel?: string;
   visionRounds?: number;
   visualFewShot?: boolean;
+  genAssets?: boolean;
 }
 
 export function parseDurationMs(raw: string): number {
@@ -67,6 +68,7 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     ...(opts.style ? { style: opts.style } : {}),
     ...(vision ? { vision } : {}),
     ...(opts.visualFewShot ? { visualFewShot: true } : {}),
+    ...(opts.genAssets ? { genAssets: true } : {}),
   });
 
   if (!result.ok) {

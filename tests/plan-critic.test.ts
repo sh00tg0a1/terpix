@@ -48,6 +48,27 @@ describe('critiquePlan', () => {
     expect(rules('一桌子菜', plan(layers))).not.toContain('coverage');
   });
 
+  it('counts a scatter layer toward coverage (one node = count instances)', () => {
+    const scatter = {
+      type: 'scatter' as const,
+      asset: 'bowl',
+      color: '#c0392b',
+      count: 5,
+      area: { x0: 0.3, y0: 0.7, x1: 0.7, y1: 0.7 },
+      scale: 0.95,
+      scaleJitter: 0.1,
+      seed: 1,
+    };
+    expect(rules('一桌子菜', plan([scatter]))).not.toContain('coverage');
+  });
+
+  it('does not let furniture 桌 inflate an unrelated count (coverage)', () => {
+    // bare 桌 used to match the crowd quantifier, so "木桌上的一只猫" demanded
+    // 5 cats and a single-cat plan failed coverage. Only 一桌 is a crowd.
+    const p = plan([sprite('cat', 0.5, 0.7, 1.0)]);
+    expect(rules('木桌上的一只猫', p)).not.toContain('coverage');
+  });
+
   it('flags cat used for people (wrong-substitute)', () => {
     const p = plan([sprite('cat', 0.3, 0.7, 1.0), sprite('cat', 0.7, 0.7, 1.0)]);
     expect(rules('两个人', p)).toContain('wrong-substitute');
@@ -71,6 +92,12 @@ describe('critiquePlan', () => {
   it('flags non-ASCII text (text-charset)', () => {
     const p = plan([sprite('planet', 0.7, 0.4, 2.6), sprite('spaceship', 0.4, 0.5, 1.0), text('真好吃', 0.5, 0.1)]);
     expect(rules('a ship', p)).toContain('text-charset');
+  });
+
+  it('allows CJK text when renderer is ascii (native terminal glyphs)', () => {
+    const p = plan([sprite('planet', 0.7, 0.4, 2.6), sprite('spaceship', 0.4, 0.5, 1.0), text('真好吃', 0.5, 0.1)]);
+    const asciiPlan = { ...p, renderer: 'ascii' as const };
+    expect(rules('a ship', asciiPlan)).not.toContain('text-charset');
   });
 
   it('accepts plain uppercase ASCII text', () => {

@@ -3,8 +3,30 @@ import { paintBackground } from './backgrounds.js';
 import { findNearestName, getAsset } from './assets/registry.js';
 import { ease, hexToRgb, lerp, mulberry32, type Ease } from './math.js';
 import { applyStyle, resolveStyle } from './styles.js';
-import type { KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
+import type { CameraT, KeyframeT, LayerT, ScenePlanT, ShotT } from './dsl.js';
 import type { RGBFrame } from './types.js';
+
+const FLAT_CAMERA: CameraT = { projection: 'flat', tilt: 0.5 };
+
+// Pseudo-isometric depth projection. `depth` 0→1 (near→far) pushes a sprite
+// up the frame, shrinks it, and dims it, so a scene reads front-to-back.
+// At depth 0 it is the identity, so flat scenes are untouched.
+function projectIso(
+  cy: number,
+  size: number,
+  opacity: number,
+  depth: number,
+  tilt: number,
+  bufH: number,
+): { cy: number; size: number; opacity: number } {
+  if (depth <= 0 || tilt <= 0) return { cy, size, opacity };
+  const recede = depth * tilt;
+  return {
+    cy: cy - recede * bufH * 0.45,
+    size: size * (1 - recede * 0.45),
+    opacity: opacity * (1 - recede * 0.25),
+  };
+}
 
 export interface ComposeOpts {
   w: number;
@@ -15,6 +37,7 @@ export interface ComposeOpts {
 export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGenerator<RGBFrame> {
   const { w, h, fps } = opts;
   const style = resolveStyle(plan.style);
+  const camera = plan.camera ?? FLAT_CAMERA;
   let baseMs = 0;
   for (const shot of plan.shots) {
     const totalFrames = Math.ceil((shot.durationMs / 1000) * fps);
@@ -25,7 +48,8 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
       const shotTMs = Math.round((f * 1000) / fps);
       const buf = createBuffer(w, h);
       paintBackground(buf, effectiveBackground, shotTMs);
-      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot);
+      const geoms = resolveSpriteGeoms(shot.layers, buf, camera, shotTMs);
+      for (const layer of shot.layers) drawLayer(buf, layer, shotTMs, shot, camera, geoms);
       applyStyle(buf, style);
       yield { w, h, ptsMs: baseMs + shotTMs, rgba: buf.rgba };
     }
@@ -33,10 +57,17 @@ export async function* composite(plan: ScenePlanT, opts: ComposeOpts): AsyncGene
   }
 }
 
-function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT): void {
+function drawLayer(
+  buf: PixelBuffer,
+  layer: LayerT,
+  tMs: number,
+  shot: ShotT,
+  camera: CameraT,
+  geoms: Map<LayerT, SpriteGeom>,
+): void {
   switch (layer.type) {
     case 'sprite':
-      drawSpriteLayer(buf, layer, tMs);
+      drawSpriteLayer(buf, layer, geoms.get(layer));
       return;
     case 'text':
       drawTextLayer(buf, layer, tMs, shot.durationMs);
@@ -44,6 +75,54 @@ function drawLayer(buf: PixelBuffer, layer: LayerT, tMs: number, shot: ShotT): v
     case 'particles':
       drawParticlesLayer(buf, layer, tMs);
       return;
+    case 'scatter':
+      drawScatterLayer(buf, layer, camera);
+      return;
+  }
+}
+
+function drawScatterLayer(
+  buf: PixelBuffer,
+  layer: Extract<LayerT, { type: 'scatter' }>,
+  camera: CameraT,
+): void {
+  const entry = getAsset(layer.asset);
+  if (!entry) {
+    const hint = findNearestName(layer.asset);
+    throw new Error(
+      `unknown sprite asset '${layer.asset}'` +
+        (hint ? ` (did you mean '${hint}'?)` : '') +
+        '. Run `terpix asset list` to see registered names.',
+    );
+  }
+  const color = hexToRgb(layer.color ?? '#cccccc');
+  const rand = mulberry32(layer.seed);
+  const n = layer.count;
+  const minWH = Math.min(buf.w, buf.h);
+  const iso = camera.projection === 'iso';
+  // Compute every instance, then paint back-to-front (lower y = nearer = on
+  // top) so overlapping copies layer naturally.
+  const instances: Array<{ cx: number; cy: number; size: number; opacity: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const baseX = lerp(layer.area.x0, layer.area.x1, t);
+    const baseY = lerp(layer.area.y0, layer.area.y1, t);
+    const jx = (rand() - 0.5) * 0.04;
+    const jy = (rand() - 0.5) * 0.06;
+    const js = 1 + (rand() - 0.5) * 2 * layer.scaleJitter;
+    const cx = (baseX + jx) * buf.w;
+    const baseSize = layer.scale * js * minWH * 0.2;
+    if (iso) {
+      const depth = lerp(layer.depth0, layer.depth1, t);
+      const p = projectIso((baseY + jy) * buf.h, baseSize, 1, depth, camera.tilt, buf.h);
+      instances.push({ cx, cy: p.cy, size: p.size, opacity: p.opacity });
+    } else {
+      instances.push({ cx, cy: (baseY + jy) * buf.h, size: baseSize, opacity: 1 });
+    }
+  }
+  instances.sort((a, b) => a.cy - b.cy);
+  for (const inst of instances) {
+    entry.draw({ buf, cx: inst.cx, cy: inst.cy, size: inst.size, color, rotation: 0, opacity: inst.opacity });
   }
 }
 
@@ -53,6 +132,7 @@ interface SpriteState {
   scale: number;
   rotation: number;
   opacity: number;
+  depth: number;
 }
 
 function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteState {
@@ -75,25 +155,144 @@ function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteS
     scale: lerp(prev.scale ?? 1, next.scale ?? prev.scale ?? 1, t),
     rotation: lerp(prev.rotation ?? 0, next.rotation ?? prev.rotation ?? 0, t),
     opacity: lerp(prev.opacity ?? 1, next.opacity ?? prev.opacity ?? 1, t),
+    depth: lerp(prev.depth ?? 0, next.depth ?? prev.depth ?? 0, t),
   };
 }
 
-function drawSpriteLayer(buf: PixelBuffer, layer: Extract<LayerT, { type: 'sprite' }>, tMs: number): void {
-  const state = interpolate(layer.keyframes, tMs, layer.ease);
-  const cx = state.x * buf.w;
-  const cy = state.y * buf.h;
-  const size = state.scale * Math.min(buf.w, buf.h) * 0.2;
-  const color = hexToRgb(layer.color ?? '#cccccc');
-  const entry = getAsset(layer.asset);
+type SpriteLayer = Extract<LayerT, { type: 'sprite' }>;
+
+interface SpriteGeom {
+  cx: number;
+  cy: number;
+  size: number;
+  opacity: number;
+  rotation: number;
+}
+
+function requireAsset(name: string) {
+  const entry = getAsset(name);
   if (!entry) {
-    const hint = findNearestName(layer.asset);
+    const hint = findNearestName(name);
     throw new Error(
-      `unknown sprite asset '${layer.asset}'` +
+      `unknown sprite asset '${name}'` +
         (hint ? ` (did you mean '${hint}'?)` : '') +
         '. Run `terpix asset list` to see registered names.',
     );
   }
-  entry.draw({ buf, cx, cy, size, color, rotation: state.rotation, opacity: state.opacity });
+  return entry;
+}
+
+// A sprite's own geometry from its keyframes (before any relational placement).
+function baseSpriteGeom(layer: SpriteLayer, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
+  const state = interpolate(layer.keyframes, tMs, layer.ease);
+  const cx = state.x * buf.w;
+  const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
+  if (camera.projection === 'iso') {
+    const p = projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h);
+    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation: state.rotation };
+  }
+  return { cx, cy: state.y * buf.h, size: baseSize, opacity: state.opacity, rotation: state.rotation };
+}
+
+// Where a sprite "sits" within its own bbox, used as the contact point when it
+// is placed ON something. Falls back to the bottom (for ground-resting assets)
+// or the center.
+function attachPoint(asset: string): [number, number] {
+  const m = getAsset(asset)?.metrics;
+  return m?.points?.base ?? (m?.anchor === 'bottom' ? [0.5, 0.9] : [0.5, 0.5]);
+}
+
+// Resolve a sprite that declares `on`: land its attach point on the target's
+// named point. Pure 2D placement — the target's geometry and named point
+// decide where the child sits; the child keeps its own size.
+function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number, extraDx = 0): SpriteGeom {
+  const childBase = baseSpriteGeom(layer, buf, camera, tMs);
+  const on = layer.on!;
+  const tGeom = target.geom;
+  const point = getAsset(target.layer.asset)?.metrics?.points?.[on.at] ?? [0.5, 0.5];
+
+  const fx = tGeom.cx + (point[0] - 0.5) * tGeom.size + (on.dx + extraDx) * tGeom.size * 0.5;
+  const fy = tGeom.cy + (point[1] - 0.5) * tGeom.size + on.dy * tGeom.size;
+  const [ax, ay] = attachPoint(layer.asset);
+  const size = childBase.size;
+  return {
+    cx: fx - (ax - 0.5) * size,
+    cy: fy - (ay - 0.5) * size,
+    size,
+    opacity: childBase.opacity,
+    rotation: childBase.rotation,
+  };
+}
+
+// Resolve geometry for every sprite layer, honoring relational placement.
+// Non-`on` sprites resolve directly; `on` sprites resolve from their target
+// (iteratively, so chains like steam→bowl→table settle).
+export function resolveSpriteGeoms(
+  layers: LayerT[],
+  buf: PixelBuffer,
+  camera: CameraT,
+  tMs: number,
+): Map<LayerT, SpriteGeom> {
+  const out = new Map<LayerT, SpriteGeom>();
+  const byId = new Map<string, { geom: SpriteGeom; layer: SpriteLayer }>();
+  let pending: SpriteLayer[] = [];
+  for (const layer of layers) {
+    if (layer.type !== 'sprite') continue;
+    if (layer.on) {
+      pending.push(layer);
+      continue;
+    }
+    const g = baseSpriteGeom(layer, buf, camera, tMs);
+    out.set(layer, g);
+    if (layer.id) byId.set(layer.id, { geom: g, layer });
+  }
+
+  // Auto-spread: sprites that land on the SAME target point would stack at one
+  // spot (a model often emits N separate "bowl on table" layers, all dx=0).
+  // Fan out the dx=0 members of each group evenly across the surface so they
+  // don't overlap — regardless of whether the plan used `repeat` or N nodes.
+  const autoDx = new Map<SpriteLayer, number>();
+  const groups = new Map<string, SpriteLayer[]>();
+  for (const l of pending) {
+    const k = `${l.on!.layer}::${l.on!.at}`;
+    const g = groups.get(k);
+    if (g) g.push(l);
+    else groups.set(k, [l]);
+  }
+  for (const g of groups.values()) {
+    const auto = g.filter((l) => (l.on!.dx ?? 0) === 0);
+    if (auto.length > 1) {
+      const span = 1.5; // total dx span across the surface (dx is ±1 of half-width)
+      const step = span / (auto.length - 1);
+      auto.forEach((l, i) => autoDx.set(l, (i - (auto.length - 1) / 2) * step));
+    }
+  }
+
+  for (let pass = 0; pass < 4 && pending.length > 0; pass++) {
+    const next: SpriteLayer[] = [];
+    for (const layer of pending) {
+      const target = byId.get(layer.on!.layer);
+      if (!target) {
+        next.push(layer);
+        continue;
+      }
+      const g = placeOnGeom(layer, target, buf, camera, tMs, autoDx.get(layer) ?? 0);
+      out.set(layer, g);
+      if (layer.id) byId.set(layer.id, { geom: g, layer });
+    }
+    if (next.length === pending.length) break; // no progress (missing/cyclic target)
+    pending = next;
+  }
+  // Unresolved `on` layers (bad/cyclic ref): fall back to their own keyframes.
+  for (const layer of pending) out.set(layer, baseSpriteGeom(layer, buf, camera, tMs));
+  return out;
+}
+
+function drawSpriteLayer(buf: PixelBuffer, layer: SpriteLayer, geom: SpriteGeom | undefined): void {
+  const entry = requireAsset(layer.asset);
+  const g = geom ?? { cx: buf.w / 2, cy: buf.h / 2, size: Math.min(buf.w, buf.h) * 0.2, opacity: 1, rotation: 0 };
+  const color = hexToRgb(layer.color ?? '#cccccc');
+  entry.draw({ buf, cx: g.cx, cy: g.cy, size: g.size, color, rotation: g.rotation, opacity: g.opacity });
 }
 
 // Target char-cell height as fraction of buffer height (glyph = 7 rows tall).

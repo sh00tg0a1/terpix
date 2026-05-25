@@ -57,6 +57,74 @@ export function drawHumanAscii(ctx: AsciiDrawCtx): void {
   blit(ctx.buf, HUMAN_ART, ctx.cx, ctx.cy, ctx.color);
 }
 
+const PLANET_ART: string[] = [
+  ' .---. ',
+  '/     \\',
+  '|     |',
+  '\\     /',
+  " '---' ",
+];
+export function drawPlanetAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, PLANET_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const MOON_ART: string[] = [
+  ' .-. ',
+  '(   )',
+  " '-' ",
+];
+export function drawMoonAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, MOON_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const MOUNTAIN_ART: string[] = [
+  '   /\\   ',
+  '  /  \\  ',
+  ' / ^^ \\ ',
+  '/______\\',
+];
+export function drawMountainAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, MOUNTAIN_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const TREE_ART: string[] = [
+  '  /\\  ',
+  ' /  \\ ',
+  '/____\\',
+  '  ||  ',
+  '  ||  ',
+];
+export function drawTreeAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, TREE_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const SPACESHIP_ART: string[] = [
+  '   __  ',
+  '==[__]>',
+  '   --  ',
+];
+export function drawSpaceshipAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, SPACESHIP_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const SUPERMAN_ART: string[] = [
+  ' \\o/ ',
+  '  |  ',
+  ' /~\\ ',
+];
+export function drawSupermanAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, SUPERMAN_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
+const TABLE_ART: string[] = [
+  '________',
+  '||    ||',
+  '||    ||',
+];
+export function drawTableAscii(ctx: AsciiDrawCtx): void {
+  blit(ctx.buf, TABLE_ART, ctx.cx, ctx.cy, ctx.color);
+}
+
 // Banner: draws a centered single-line label below an art block. Used as
 // helper for ascii intros that want title cards without using the text layer.
 export function drawAsciiLabel(

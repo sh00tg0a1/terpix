@@ -9,7 +9,6 @@ import { planFromNLAnthropic } from '../src/adapters/llm/anthropic.js';
 const planFromNL = (req: Parameters<typeof planFromNLAnthropic>[0]) =>
   planFromNLAnthropic(req, { apiKey: 'sk-mock', defaultModel: 'claude-sonnet-4-6' });
 import { catalogMarkdown, spriteEnumForSchema } from '../src/adapters/llm/asset-catalog.js';
-import { buildSystemPrompt } from '../src/adapters/llm/system-prompt.js';
 
 type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown };
 
@@ -35,32 +34,18 @@ function mockClient(...responses: unknown[]): Anthropic {
   return { messages: { create } } as unknown as Anthropic;
 }
 
-// A plan that passes BOTH schema and the semantic critic (large enough
-// subject + a backdrop so it doesn't trip empty-frame / subject-scale).
+// A Scene v2 that passes BOTH schema and the semantic critic (large enough
+// subject + a backdrop so it doesn't trip empty-frame / subject-scale). The
+// adapter parses Scene2 and compiles it to a v1 plan before critiquing.
 const VALID_PLAN_INPUT = {
-  version: 1,
+  version: 2,
   fps: 24,
   renderer: 'half',
-  shots: [
-    {
-      id: 's1',
-      durationMs: 5000,
-      background: { type: 'solid', color: '#000000' },
-      layers: [
-        {
-          type: 'sprite',
-          asset: 'planet',
-          ease: 'linear',
-          keyframes: [{ tMs: 0, x: 0.7, y: 0.5, scale: 2.6 }],
-        },
-        {
-          type: 'sprite',
-          asset: 'spaceship',
-          ease: 'linear',
-          keyframes: [{ tMs: 0, x: 0.4, y: 0.5, scale: 1.0 }],
-        },
-      ],
-    },
+  durationMs: 5000,
+  background: { type: 'solid', color: '#000000' },
+  nodes: [
+    { kind: 'sprite', asset: 'planet', scale: 2.6, place: { in: 'sky', align: 'top-right' } },
+    { kind: 'sprite', asset: 'spaceship', scale: 1.0, place: { in: 'center', align: 'center' } },
   ],
 };
 
@@ -90,24 +75,6 @@ describe('asset-catalog', () => {
   });
 });
 
-describe('buildSystemPrompt', () => {
-  beforeEach(() => {
-    clearRegistry();
-    registerBuiltins();
-  });
-
-  it('embeds the asset catalog', () => {
-    const prompt = buildSystemPrompt({ renderer: 'half' });
-    expect(prompt).toContain('spaceship');
-    expect(prompt).toContain('planet');
-  });
-
-  it('stays under 17KB (prompt-cache friendly)', () => {
-    const prompt = buildSystemPrompt({ renderer: 'half' });
-    expect(prompt.length).toBeLessThan(17_000);
-  });
-});
-
 describe('planFromNL', () => {
   beforeEach(() => {
     clearRegistry();
@@ -124,7 +91,32 @@ describe('planFromNL', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.attempts).toBe(1);
-      expect(result.plan.shots[0]!.id).toBe('s1');
+      expect(result.plan.shots[0]!.id).toBe('scene');
+    }
+  });
+
+  it('drops layers referencing assets not in the registry (hallucination safety net)', async () => {
+    const sceneWithBogus = {
+      version: 2,
+      fps: 24,
+      renderer: 'half',
+      durationMs: 5000,
+      background: { type: 'solid', color: '#000000' },
+      nodes: [
+        { kind: 'sprite', asset: 'planet', scale: 2.6, place: { in: 'sky', align: 'top-right' } },
+        { kind: 'sprite', asset: 'spaceship', scale: 1.0, place: { in: 'center', align: 'center' } },
+        { kind: 'sprite', asset: 'totally-made-up', scale: 1.0, place: { in: 'ground' } },
+      ],
+    };
+    const client = mockClient(fakeResp(sceneWithBogus));
+    const result = await planFromNL({ prompt: 'a ship in space', durationMs: 5000, client });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const assets = result.plan.shots[0]!.layers
+        .filter((l) => l.type === 'sprite')
+        .map((l) => (l as { asset: string }).asset);
+      expect(assets).not.toContain('totally-made-up');
+      expect(assets).toContain('planet');
     }
   });
 

@@ -129,7 +129,7 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
         dx: (node.place.dx ?? 0) + d,
         dy: node.place.dy ?? 0,
       },
-      keyframes: [{ tMs: 0, scale: node.scale }],
+      keyframes: [{ tMs: 0, scale: node.scale, ...depthKf(node) }],
     }));
   }
 
@@ -164,8 +164,8 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
         ...(node.id && single ? { id: node.id } : {}),
         ease: node.motion!.ease,
         keyframes: [
-          { tMs: 0, x: sx, y: sy, scale: node.scale },
-          { tMs: scene.durationMs, x: ex, y: ey, scale: node.scale },
+          { tMs: 0, x: sx, y: sy, scale: node.scale, ...depthKf(node) },
+          { tMs: scene.durationMs, x: ex, y: ey, scale: node.scale, ...depthKf(node) },
         ],
       };
     });
@@ -180,9 +180,21 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
     ...(node.id && single ? { id: node.id } : {}),
     ease: 'linear',
     keyframes: [
-      { tMs: 0, x: layout === 'row' ? bx + o : bx, y: layout === 'column' ? by + o : by, scale: node.scale },
+      {
+        tMs: 0,
+        x: layout === 'row' ? bx + o : bx,
+        y: layout === 'column' ? by + o : by,
+        scale: node.scale,
+        ...depthKf(node),
+      },
     ],
   }));
+}
+
+// Pass a node's depth onto its compiled keyframes (only when set, so flat
+// scenes keep clean keyframes).
+function depthKf(node: NodeT): { depth?: number } {
+  return node.kind === 'sprite' && node.depth !== undefined ? { depth: node.depth } : {};
 }
 
 function pointFor(node: NodeT, scene: Scene2T): { x: number; y: number } {
@@ -229,6 +241,7 @@ export function compileScene(scene: Scene2T): ScenePlanT {
     fps: scene.fps,
     renderer: scene.renderer,
     ...(scene.style ? { style: scene.style } : {}),
+    ...(scene.camera ? { camera: scene.camera } : {}),
     shots: [{ id: 'scene', durationMs: scene.durationMs, background: scene.background, layers }],
   });
 }

@@ -74,6 +74,26 @@ describe('compileScene (v2 relational → v1)', () => {
     expect(kfs[1]!.y!).toBeLessThan(kfs[0]!.y!); // moves up
   });
 
+  it('passes an iso camera through and threads node depth into keyframes', () => {
+    const plan = compileScene(
+      Scene2.parse({
+        version: 2,
+        renderer: 'half',
+        background: bg,
+        camera: { projection: 'iso', tilt: 0.5 },
+        nodes: [{ kind: 'sprite', asset: 'bowl', depth: 0.6, place: { in: 'ground' } }],
+      }),
+    );
+    expect(plan.camera?.projection).toBe('iso');
+    expect(sprites(plan.shots[0]!.layers)[0]!.keyframes[0]!.depth).toBe(0.6);
+  });
+
+  it('omits camera and depth when not set (flat scenes stay clean)', () => {
+    const plan = compile([{ kind: 'sprite', asset: 'bowl', place: { in: 'ground' } }]);
+    expect(plan.camera).toBeUndefined();
+    expect(sprites(plan.shots[0]!.layers)[0]!.keyframes[0]!.depth).toBeUndefined();
+  });
+
   it('is content-agnostic: a landscape and a dinner use the same primitives', () => {
     const land = compile([
       { kind: 'sprite', asset: 'mountain', repeat: 3, place: { in: 'ground' }, distribute: { layout: 'row', gap: 0.3 } },

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HexColor, Background, Renderer, StylePresetName } from '../dsl.js';
+import { HexColor, Background, Renderer, StylePresetName, Camera } from '../dsl.js';
 
 /**
  * Scene v2 — a RELATIONAL scene description. Instead of pinning every element
@@ -70,6 +70,9 @@ const base = {
   repeat: z.number().int().min(1).max(64).default(1),
   distribute: Distribute,
   motion: Motion,
+  // Depth into the scene, 0 = near/front, 1 = far/back. Only meaningful when
+  // the scene has an iso `camera`: deeper nodes recede up-frame, shrink, dim.
+  depth: z.number().min(0).max(1).optional(),
 };
 
 export const Node = z.discriminatedUnion('kind', [
@@ -102,6 +105,9 @@ export const Scene2 = z.object({
   durationMs: z.number().positive().default(5000),
   renderer: Renderer,
   style: StylePresetName.optional(),
+  // Optional pseudo-isometric camera (3/4 / overhead feel). With it set, node
+  // `depth` controls front-to-back recession.
+  camera: Camera.optional(),
   background: Background,
   // Optional custom regions, merged over the built-in frame/ground/sky/center.
   regions: z.record(z.string(), Rect).optional(),

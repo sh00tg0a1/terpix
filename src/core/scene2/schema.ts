@@ -45,6 +45,23 @@ export const Distribute = z
   })
   .optional();
 
+// Motion turns a node from a still into an animated one. `place` gives the
+// resting/base position; `kind` describes how it travels relative to that:
+//   cross — passes all the way across the frame (off one edge to the other)
+//   enter — comes in from an edge and stops at the base position
+//   exit  — starts at base and leaves toward an edge
+//   rise / fall — drifts up / down through the base position
+//   drift — gentle nudge in `dir` (slow ambient motion)
+// `dir` picks the edge/axis (default: cross/enter/exit → horizontal "right",
+// rise=up, fall=down, drift=right). Compiles to start/end keyframes.
+export const Motion = z
+  .object({
+    kind: z.enum(['cross', 'enter', 'exit', 'rise', 'fall', 'drift']),
+    dir: z.enum(['left', 'right', 'up', 'down']).optional(),
+    ease: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).default('easeInOut'),
+  })
+  .optional();
+
 const base = {
   id: z.string().min(1).optional(),
   scale: z.number().positive().default(1),
@@ -52,6 +69,7 @@ const base = {
   place: Place,
   repeat: z.number().int().min(1).max(64).default(1),
   distribute: Distribute,
+  motion: Motion,
 };
 
 export const Node = z.discriminatedUnion('kind', [

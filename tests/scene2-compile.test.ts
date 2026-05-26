@@ -54,6 +54,26 @@ describe('compileScene (v2 relational → v1)', () => {
     expect(kf.x!).toBeGreaterThan(0.55); // right
   });
 
+  it('motion cross compiles to two keyframes that span off-frame edge to edge', () => {
+    const plan = compile([
+      { kind: 'sprite', asset: 'spaceship', place: { in: 'center' }, motion: { kind: 'cross', dir: 'right' } },
+    ]);
+    const kfs = sprites(plan.shots[0]!.layers)[0]!.keyframes;
+    expect(kfs).toHaveLength(2);
+    expect(kfs[0]!.x!).toBeLessThan(0); // enters off the left edge
+    expect(kfs[1]!.x!).toBeGreaterThan(1); // exits off the right edge
+    expect(kfs[1]!.tMs).toBeGreaterThan(kfs[0]!.tMs); // travels over time
+  });
+
+  it('motion rise compiles to an upward (decreasing y) two-keyframe path', () => {
+    const plan = compile([
+      { kind: 'sprite', asset: 'steam', place: { in: 'center' }, motion: { kind: 'rise' } },
+    ]);
+    const kfs = sprites(plan.shots[0]!.layers)[0]!.keyframes;
+    expect(kfs).toHaveLength(2);
+    expect(kfs[1]!.y!).toBeLessThan(kfs[0]!.y!); // moves up
+  });
+
   it('is content-agnostic: a landscape and a dinner use the same primitives', () => {
     const land = compile([
       { kind: 'sprite', asset: 'mountain', repeat: 3, place: { in: 'ground' }, distribute: { layout: 'row', gap: 0.3 } },

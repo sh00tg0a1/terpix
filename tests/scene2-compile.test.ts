@@ -94,6 +94,34 @@ describe('compileScene (v2 relational → v1)', () => {
     expect(sprites(plan.shots[0]!.layers)[0]!.keyframes[0]!.depth).toBeUndefined();
   });
 
+  it('compiles a multi-shot scene into sequential v1 shots with their own backgrounds', () => {
+    const plan = compileScene(
+      Scene2.parse({
+        version: 2,
+        renderer: 'half',
+        style: 'noir',
+        shots: [
+          { durationMs: 3000, background: bg, nodes: [{ kind: 'sprite', asset: 'spaceship', place: { in: 'center' } }] },
+          {
+            durationMs: 2000,
+            background: { type: 'solid', color: '#220000' },
+            nodes: [{ kind: 'sprite', asset: 'planet', place: { in: 'center' } }],
+          },
+        ],
+      }),
+    );
+    expect(plan.shots).toHaveLength(2);
+    expect(plan.shots[0]!.durationMs).toBe(3000);
+    expect(plan.shots[1]!.durationMs).toBe(2000);
+    expect(plan.shots[1]!.background).toMatchObject({ type: 'solid', color: '#220000' });
+    expect(plan.style).toBe('noir'); // plan-level, applies to all shots
+    expect(plan.shots[0]!.id).not.toBe(plan.shots[1]!.id); // distinct ids
+  });
+
+  it('rejects a scene with neither nodes nor shots', () => {
+    expect(() => Scene2.parse({ version: 2, renderer: 'half', background: bg })).toThrow();
+  });
+
   it('is content-agnostic: a landscape and a dinner use the same primitives', () => {
     const land = compile([
       { kind: 'sprite', asset: 'mountain', repeat: 3, place: { in: 'ground' }, distribute: { layout: 'row', gap: 0.3 } },

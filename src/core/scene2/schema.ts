@@ -98,24 +98,43 @@ export const Rect = z.object({
   y1: z.number().min(0).max(1),
 });
 
-export const Scene2 = z.object({
-  version: z.literal(2),
-  title: z.string().default(''),
-  fps: z.number().int().positive().default(24),
+// One beat of a multi-shot scene. Its own background, duration, regions, and
+// nodes; the scene-level `style`/`camera` apply to all beats (the v1 render IR
+// keeps those plan-level, not per-shot).
+export const Beat = z.object({
   durationMs: z.number().positive().default(5000),
-  renderer: Renderer,
-  style: StylePresetName.optional(),
-  // Optional pseudo-isometric camera (3/4 / overhead feel). With it set, node
-  // `depth` controls front-to-back recession.
-  camera: Camera.optional(),
   background: Background,
-  // Optional custom regions, merged over the built-in frame/ground/sky/center.
   regions: z.record(z.string(), Rect).optional(),
-  // Painted in order = back-to-front (z-order), same as v1 layers.
   nodes: z.array(Node).min(1),
 });
 
+export const Scene2 = z
+  .object({
+    version: z.literal(2),
+    title: z.string().default(''),
+    fps: z.number().int().positive().default(24),
+    durationMs: z.number().positive().default(5000),
+    renderer: Renderer,
+    style: StylePresetName.optional(),
+    // Optional pseudo-isometric camera (3/4 / overhead feel). With it set, node
+    // `depth` controls front-to-back recession. Plan-level (all beats).
+    camera: Camera.optional(),
+    // SINGLE-SHOT shorthand: a background + nodes (+ optional regions). Most
+    // scenes use this. Ignored when `shots` is given.
+    background: Background.optional(),
+    regions: z.record(z.string(), Rect).optional(),
+    // Painted in order = back-to-front (z-order), same as v1 layers.
+    nodes: z.array(Node).min(1).optional(),
+    // MULTI-SHOT: an ordered list of beats, compiled to sequential v1 shots.
+    // Use for sequences ("first … then …", multiple scenes, a story).
+    shots: z.array(Beat).min(1).optional(),
+  })
+  .refine((s) => (s.nodes && s.background) || s.shots, {
+    message: 'provide either `nodes` + `background` (single shot) or `shots` (multi-shot)',
+  });
+
 export type Scene2T = z.infer<typeof Scene2>;
+export type BeatT = z.infer<typeof Beat>;
 export type NodeT = z.infer<typeof Node>;
 export type PlaceT = z.infer<typeof Place>;
 export type RectT = z.infer<typeof Rect>;

@@ -47,6 +47,23 @@ table surface. Order = depth.
   ]
 }
 \`\`\`
+
+### Prompt: "a spaceship flying past a red planet"
+Note: "flying past" = motion. The planet is a static backdrop (no motion); the
+ship gets \`motion: cross\` so it travels across the frame instead of freezing.
+\`\`\`json
+{
+  "version": 2, "title": "fly-by", "fps": 24, "renderer": "half",
+  "durationMs": 6000,
+  "background": { "type": "starfield", "density": 0.012, "seed": 4 },
+  "nodes": [
+    { "kind": "sprite", "asset": "planet", "scale": 2.6, "color": "#cc3333",
+      "place": { "in": "frame", "align": "right" } },
+    { "kind": "sprite", "asset": "spaceship", "scale": 1.1, "color": "#dddddd",
+      "place": { "in": "center" }, "motion": { "kind": "cross", "dir": "right" } }
+  ]
+}
+\`\`\`
 `;
 
 export function buildScenePrompt(opts: ScenePromptOpts = {}): string {
@@ -91,6 +108,27 @@ export function buildScenePrompt(opts: ScenePromptOpts = {}): string {
     `one node with \`repeat\`. \`gap\` is spacing as a fraction (row: of the frame;`,
     `on a target: of the surface). Use \`column\` for vertical stacks.`,
     ``,
+    `## Motion — animate a node with \`motion\` (action verbs need this!)`,
+    `\`place\` is the RESTING spot; \`motion\` makes the node travel. Without it a`,
+    `"flying / walking / crossing / falling" subject is FROZEN at one spot (often`,
+    `half off-screen). Map action verbs to a \`motion\`:`,
+    `- \`{ "kind": "cross", "dir": "right" }\` — flies/walks ALL the way across`,
+    `  (off one edge to the other). "a ship flying past" → cross.`,
+    `- \`{ "kind": "enter", "dir": "left" }\` — comes in from an edge, stops at`,
+    `  \`place\`. \`exit\` — leaves from \`place\` toward an edge.`,
+    `- \`{ "kind": "rise" | "fall" }\` — drifts up / down (smoke, balloons, snow`,
+    `  feel). \`{ "kind": "drift", "dir": "right" }\` — gentle ambient nudge.`,
+    `- \`dir\`: left|right|up|down. Optional \`ease\` (default easeInOut).`,
+    `Use motion on the SUBJECT that moves; leave static backdrops without it.`,
+    ``,
+    `## Overhead / tilted view — top-level \`camera\` + node \`depth\``,
+    `When the prompt asks for a bird's-eye / overhead / 45° / 俯视 / 斜视角 view,`,
+    `set \`"camera": { "projection": "iso", "tilt": 0.5 }\` and give nodes a`,
+    `\`depth\` (0 = near/front, 1 = far/back). Deeper nodes recede UP the frame,`,
+    `shrink, and dim — so a table seen from above = near diners depth ~0, the`,
+    `table ~0.3, far diners ~0.6. Omit \`camera\` for a normal head-on view.`,
+    `(Sprites stay front-facing art; this fakes depth by stacking, not true 3D.)`,
+    ``,
     `## Composition guidance`,
     `- Background sets mood: \`nebula\`/dark \`gradient\` for night/space,`,
     `  warm \`gradient\` for indoor/dining, light for day, \`starfield\` for space.`,
@@ -117,7 +155,11 @@ export function buildScenePrompt(opts: ScenePromptOpts = {}): string {
     ``,
     `## Style (optional top-level \`style\`)`,
     `default | starwars | minimalist | silhouette | noir | lineart.`,
-    `Night must NOT be minimalist. Indoor must NOT be minimalist.`,
+    `\`minimalist\` and \`silhouette\` FORCE a light (cream) background and flatten`,
+    `everything to two tones — so for **night / moonlit / dark** scenes do NOT`,
+    `use either (the dark sky turns cream and a bright moon turns black /`,
+    `invisible). For night use no style (or \`noir\`) with a dark \`nebula\` /`,
+    `\`gradient\` background and bright moon/stars. Indoor must NOT be minimalist.`,
     ``,
     `## Hard rules`,
     `- \`version\` is 2. \`renderer\` is "${renderer}".`,

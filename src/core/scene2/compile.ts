@@ -66,6 +66,48 @@ function spread(n: number, step: number): number[] {
   return out;
 }
 
+// A motion's travel as start/end points (0..1, off-frame allowed) around a
+// base (bx, by). `perp` is the axis to spread `repeat` copies along (the one
+// the motion does NOT travel), so a row of movers fans out instead of stacking.
+type MotionKind = 'cross' | 'enter' | 'exit' | 'rise' | 'fall' | 'drift';
+function motionPath(
+  kind: MotionKind,
+  dir: 'left' | 'right' | 'up' | 'down' | undefined,
+  bx: number,
+  by: number,
+): { sx: number; sy: number; ex: number; ey: number; perp: 'x' | 'y' } {
+  const LO = -0.2;
+  const HI = 1.2;
+  switch (kind) {
+    case 'cross':
+      if (dir === 'up') return { sx: bx, sy: HI, ex: bx, ey: LO, perp: 'x' };
+      if (dir === 'down') return { sx: bx, sy: LO, ex: bx, ey: HI, perp: 'x' };
+      if (dir === 'left') return { sx: HI, sy: by, ex: LO, ey: by, perp: 'y' };
+      return { sx: LO, sy: by, ex: HI, ey: by, perp: 'y' }; // right (default)
+    case 'enter':
+      if (dir === 'up') return { sx: bx, sy: HI, ex: bx, ey: by, perp: 'x' };
+      if (dir === 'down') return { sx: bx, sy: LO, ex: bx, ey: by, perp: 'x' };
+      if (dir === 'right') return { sx: HI, sy: by, ex: bx, ey: by, perp: 'y' };
+      return { sx: LO, sy: by, ex: bx, ey: by, perp: 'y' }; // from left (default)
+    case 'exit':
+      if (dir === 'up') return { sx: bx, sy: by, ex: bx, ey: LO, perp: 'x' };
+      if (dir === 'down') return { sx: bx, sy: by, ex: bx, ey: HI, perp: 'x' };
+      if (dir === 'left') return { sx: bx, sy: by, ex: LO, ey: by, perp: 'y' };
+      return { sx: bx, sy: by, ex: HI, ey: by, perp: 'y' }; // to right (default)
+    case 'rise':
+      return { sx: bx, sy: by + 0.18, ex: bx, ey: by - 0.18, perp: 'x' };
+    case 'fall':
+      return { sx: bx, sy: by - 0.18, ex: bx, ey: by + 0.18, perp: 'x' };
+    case 'drift': {
+      const d = 0.12;
+      if (dir === 'left') return { sx: bx, sy: by, ex: bx - d, ey: by, perp: 'y' };
+      if (dir === 'up') return { sx: bx, sy: by, ex: bx, ey: by - d, perp: 'x' };
+      if (dir === 'down') return { sx: bx, sy: by, ex: bx, ey: by + d, perp: 'x' };
+      return { sx: bx, sy: by, ex: bx + d, ey: by, perp: 'y' }; // right (default)
+    }
+  }
+}
+
 function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): unknown[] {
   const n = node.repeat;
   const single = n === 1;
@@ -87,7 +129,7 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
         dx: (node.place.dx ?? 0) + d,
         dy: node.place.dy ?? 0,
       },
-      keyframes: [{ tMs: 0, scale: node.scale }],
+      keyframes: [{ tMs: 0, scale: node.scale, ...depthKf(node) }],
     }));
   }
 
@@ -105,6 +147,30 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
   bx += node.place.dx ?? 0;
   by += node.place.dy ?? 0;
 
+  // Animated: travel from start→end (two keyframes). Copies fan out along the
+  // axis the motion doesn't travel so a repeated mover doesn't stack.
+  if (node.motion) {
+    const p = motionPath(node.motion.kind, node.motion.dir, bx, by);
+    const offs = spread(n, node.distribute?.gap ?? 0.16);
+    return offs.map((o) => {
+      const sx = p.perp === 'x' ? p.sx + o : p.sx;
+      const sy = p.perp === 'y' ? p.sy + o : p.sy;
+      const ex = p.perp === 'x' ? p.ex + o : p.ex;
+      const ey = p.perp === 'y' ? p.ey + o : p.ey;
+      return {
+        type: 'sprite',
+        asset: node.asset,
+        ...(node.color ? { color: node.color } : {}),
+        ...(node.id && single ? { id: node.id } : {}),
+        ease: node.motion!.ease,
+        keyframes: [
+          { tMs: 0, x: sx, y: sy, scale: node.scale, ...depthKf(node) },
+          { tMs: scene.durationMs, x: ex, y: ey, scale: node.scale, ...depthKf(node) },
+        ],
+      };
+    });
+  }
+
   const layout = node.distribute?.layout ?? 'row';
   const offs = spread(n, node.distribute?.gap ?? 0.16);
   return offs.map((o) => ({
@@ -114,9 +180,21 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
     ...(node.id && single ? { id: node.id } : {}),
     ease: 'linear',
     keyframes: [
-      { tMs: 0, x: layout === 'row' ? bx + o : bx, y: layout === 'column' ? by + o : by, scale: node.scale },
+      {
+        tMs: 0,
+        x: layout === 'row' ? bx + o : bx,
+        y: layout === 'column' ? by + o : by,
+        scale: node.scale,
+        ...depthKf(node),
+      },
     ],
   }));
+}
+
+// Pass a node's depth onto its compiled keyframes (only when set, so flat
+// scenes keep clean keyframes).
+function depthKf(node: NodeT): { depth?: number } {
+  return node.kind === 'sprite' && node.depth !== undefined ? { depth: node.depth } : {};
 }
 
 function pointFor(node: NodeT, scene: Scene2T): { x: number; y: number } {
@@ -163,6 +241,7 @@ export function compileScene(scene: Scene2T): ScenePlanT {
     fps: scene.fps,
     renderer: scene.renderer,
     ...(scene.style ? { style: scene.style } : {}),
+    ...(scene.camera ? { camera: scene.camera } : {}),
     shots: [{ id: 'scene', durationMs: scene.durationMs, background: scene.background, layers }],
   });
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HexColor, Background, Renderer, StylePresetName } from '../dsl.js';
+import { HexColor, Background, Renderer, StylePresetName, Camera } from '../dsl.js';
 
 /**
  * Scene v2 — a RELATIONAL scene description. Instead of pinning every element
@@ -45,6 +45,23 @@ export const Distribute = z
   })
   .optional();
 
+// Motion turns a node from a still into an animated one. `place` gives the
+// resting/base position; `kind` describes how it travels relative to that:
+//   cross — passes all the way across the frame (off one edge to the other)
+//   enter — comes in from an edge and stops at the base position
+//   exit  — starts at base and leaves toward an edge
+//   rise / fall — drifts up / down through the base position
+//   drift — gentle nudge in `dir` (slow ambient motion)
+// `dir` picks the edge/axis (default: cross/enter/exit → horizontal "right",
+// rise=up, fall=down, drift=right). Compiles to start/end keyframes.
+export const Motion = z
+  .object({
+    kind: z.enum(['cross', 'enter', 'exit', 'rise', 'fall', 'drift']),
+    dir: z.enum(['left', 'right', 'up', 'down']).optional(),
+    ease: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).default('easeInOut'),
+  })
+  .optional();
+
 const base = {
   id: z.string().min(1).optional(),
   scale: z.number().positive().default(1),
@@ -52,6 +69,10 @@ const base = {
   place: Place,
   repeat: z.number().int().min(1).max(64).default(1),
   distribute: Distribute,
+  motion: Motion,
+  // Depth into the scene, 0 = near/front, 1 = far/back. Only meaningful when
+  // the scene has an iso `camera`: deeper nodes recede up-frame, shrink, dim.
+  depth: z.number().min(0).max(1).optional(),
 };
 
 export const Node = z.discriminatedUnion('kind', [
@@ -84,6 +105,9 @@ export const Scene2 = z.object({
   durationMs: z.number().positive().default(5000),
   renderer: Renderer,
   style: StylePresetName.optional(),
+  // Optional pseudo-isometric camera (3/4 / overhead feel). With it set, node
+  // `depth` controls front-to-back recession.
+  camera: Camera.optional(),
   background: Background,
   // Optional custom regions, merged over the built-in frame/ground/sky/center.
   regions: z.record(z.string(), Rect).optional(),

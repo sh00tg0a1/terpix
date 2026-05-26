@@ -54,6 +54,46 @@ describe('compileScene (v2 relational → v1)', () => {
     expect(kf.x!).toBeGreaterThan(0.55); // right
   });
 
+  it('motion cross compiles to two keyframes that span off-frame edge to edge', () => {
+    const plan = compile([
+      { kind: 'sprite', asset: 'spaceship', place: { in: 'center' }, motion: { kind: 'cross', dir: 'right' } },
+    ]);
+    const kfs = sprites(plan.shots[0]!.layers)[0]!.keyframes;
+    expect(kfs).toHaveLength(2);
+    expect(kfs[0]!.x!).toBeLessThan(0); // enters off the left edge
+    expect(kfs[1]!.x!).toBeGreaterThan(1); // exits off the right edge
+    expect(kfs[1]!.tMs).toBeGreaterThan(kfs[0]!.tMs); // travels over time
+  });
+
+  it('motion rise compiles to an upward (decreasing y) two-keyframe path', () => {
+    const plan = compile([
+      { kind: 'sprite', asset: 'steam', place: { in: 'center' }, motion: { kind: 'rise' } },
+    ]);
+    const kfs = sprites(plan.shots[0]!.layers)[0]!.keyframes;
+    expect(kfs).toHaveLength(2);
+    expect(kfs[1]!.y!).toBeLessThan(kfs[0]!.y!); // moves up
+  });
+
+  it('passes an iso camera through and threads node depth into keyframes', () => {
+    const plan = compileScene(
+      Scene2.parse({
+        version: 2,
+        renderer: 'half',
+        background: bg,
+        camera: { projection: 'iso', tilt: 0.5 },
+        nodes: [{ kind: 'sprite', asset: 'bowl', depth: 0.6, place: { in: 'ground' } }],
+      }),
+    );
+    expect(plan.camera?.projection).toBe('iso');
+    expect(sprites(plan.shots[0]!.layers)[0]!.keyframes[0]!.depth).toBe(0.6);
+  });
+
+  it('omits camera and depth when not set (flat scenes stay clean)', () => {
+    const plan = compile([{ kind: 'sprite', asset: 'bowl', place: { in: 'ground' } }]);
+    expect(plan.camera).toBeUndefined();
+    expect(sprites(plan.shots[0]!.layers)[0]!.keyframes[0]!.depth).toBeUndefined();
+  });
+
   it('is content-agnostic: a landscape and a dinner use the same primitives', () => {
     const land = compile([
       { kind: 'sprite', asset: 'mountain', repeat: 3, place: { in: 'ground' }, distribute: { layout: 'row', gap: 0.3 } },

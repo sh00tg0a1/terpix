@@ -1,6 +1,13 @@
 import { ScenePlan, type ScenePlanT } from '../dsl.js';
 import { getAsset } from '../assets/registry.js';
-import type { Scene2T, NodeT, RectT } from './schema.js';
+import type { Scene2T, BeatT, NodeT, RectT } from './schema.js';
+
+// Per-beat context the emitters need: how regions resolve and how long the
+// beat runs (for motion end keyframes).
+interface BeatCtx {
+  regions?: Record<string, RectT>;
+  durationMs: number;
+}
 
 // Drop sprite layers whose asset is not in the registry. A model may emit a
 // hallucinated asset name despite the schema enum; without this the renderer
@@ -26,8 +33,8 @@ const DEFAULT_REGIONS: Record<string, RectT> = {
   center: { x0: 0.22, y0: 0.32, x1: 0.78, y1: 0.68 },
 };
 
-function regionRect(scene: Scene2T, name: string): RectT {
-  return scene.regions?.[name] ?? DEFAULT_REGIONS[name] ?? DEFAULT_REGIONS.frame!;
+function regionRect(regions: Record<string, RectT> | undefined, name: string): RectT {
+  return regions?.[name] ?? DEFAULT_REGIONS[name] ?? DEFAULT_REGIONS.frame!;
 }
 
 // A point inside a region for a given alignment, slightly inset from edges.
@@ -108,7 +115,7 @@ function motionPath(
   }
 }
 
-function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): unknown[] {
+function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, ctx: BeatCtx): unknown[] {
   const n = node.repeat;
   const single = n === 1;
 
@@ -140,7 +147,7 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
     bx = node.place.at.x;
     by = node.place.at.y;
   } else {
-    const p = alignPoint(regionRect(scene, node.place.in ?? 'frame'), node.place.align ?? 'center');
+    const p = alignPoint(regionRect(ctx.regions, node.place.in ?? 'frame'), node.place.align ?? 'center');
     bx = p.x;
     by = p.y;
   }
@@ -165,7 +172,7 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, scene: Scene2T): u
         ease: node.motion!.ease,
         keyframes: [
           { tMs: 0, x: sx, y: sy, scale: node.scale, ...depthKf(node) },
-          { tMs: scene.durationMs, x: ex, y: ey, scale: node.scale, ...depthKf(node) },
+          { tMs: ctx.durationMs, x: ex, y: ey, scale: node.scale, ...depthKf(node) },
         ],
       };
     });
@@ -197,14 +204,14 @@ function depthKf(node: NodeT): { depth?: number } {
   return node.kind === 'sprite' && node.depth !== undefined ? { depth: node.depth } : {};
 }
 
-function pointFor(node: NodeT, scene: Scene2T): { x: number; y: number } {
+function pointFor(node: NodeT, ctx: BeatCtx): { x: number; y: number } {
   if (node.place.at) return { x: node.place.at.x + node.place.dx, y: node.place.at.y + node.place.dy };
-  const p = alignPoint(regionRect(scene, node.place.in ?? 'frame'), node.place.align ?? 'center');
+  const p = alignPoint(regionRect(ctx.regions, node.place.in ?? 'frame'), node.place.align ?? 'center');
   return { x: p.x + node.place.dx, y: p.y + node.place.dy };
 }
 
-function emitText(node: Extract<NodeT, { kind: 'text' }>, scene: Scene2T): unknown[] {
-  const { x, y } = pointFor(node, scene);
+function emitText(node: Extract<NodeT, { kind: 'text' }>, ctx: BeatCtx): unknown[] {
+  const { x, y } = pointFor(node, ctx);
   return [
     {
       type: 'text',
@@ -217,8 +224,8 @@ function emitText(node: Extract<NodeT, { kind: 'text' }>, scene: Scene2T): unkno
   ];
 }
 
-function emitParticles(node: Extract<NodeT, { kind: 'particles' }>, scene: Scene2T): unknown[] {
-  const { x, y } = pointFor(node, scene);
+function emitParticles(node: Extract<NodeT, { kind: 'particles' }>, ctx: BeatCtx): unknown[] {
+  const { x, y } = pointFor(node, ctx);
   return [{ type: 'particles', kind: node.particle, count: node.count, origin: { x, y }, seed: 1 }];
 }
 
@@ -228,13 +235,24 @@ function emitParticles(node: Extract<NodeT, { kind: 'particles' }>, scene: Scene
  * renderer's relational placement. The renderer is untouched. The result is
  * validated through the v1 ScenePlan schema, so a compiler bug surfaces here.
  */
-export function compileScene(scene: Scene2T): ScenePlanT {
+// Compile one beat's nodes into v1 layers.
+function compileBeat(beat: BeatT): unknown[] {
+  const ctx: BeatCtx = { durationMs: beat.durationMs, ...(beat.regions ? { regions: beat.regions } : {}) };
   const layers: unknown[] = [];
-  for (const node of scene.nodes) {
-    if (node.kind === 'sprite') layers.push(...emitSprite(node, scene));
-    else if (node.kind === 'text') layers.push(...emitText(node, scene));
-    else layers.push(...emitParticles(node, scene));
+  for (const node of beat.nodes) {
+    if (node.kind === 'sprite') layers.push(...emitSprite(node, ctx));
+    else if (node.kind === 'text') layers.push(...emitText(node, ctx));
+    else layers.push(...emitParticles(node, ctx));
   }
+  return layers;
+}
+
+export function compileScene(scene: Scene2T): ScenePlanT {
+  // Normalize to a beat list: explicit `shots`, or the single-shot shorthand.
+  // (The schema refine guarantees one of the two is present.)
+  const beats: BeatT[] = scene.shots ?? [
+    { durationMs: scene.durationMs, background: scene.background!, nodes: scene.nodes!, ...(scene.regions ? { regions: scene.regions } : {}) },
+  ];
   return ScenePlan.parse({
     version: 1,
     title: scene.title,
@@ -242,6 +260,11 @@ export function compileScene(scene: Scene2T): ScenePlanT {
     renderer: scene.renderer,
     ...(scene.style ? { style: scene.style } : {}),
     ...(scene.camera ? { camera: scene.camera } : {}),
-    shots: [{ id: 'scene', durationMs: scene.durationMs, background: scene.background, layers }],
+    shots: beats.map((beat, i) => ({
+      id: `scene${i === 0 ? '' : i + 1}`,
+      durationMs: beat.durationMs,
+      background: beat.background,
+      layers: compileBeat(beat),
+    })),
   });
 }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { getAsset, listAssets } from '../../core/assets/registry.js';
 import { generateAsset, registerShape } from './asset-gen.js';
-import { loadCachedAsset, saveCachedAsset } from './asset-cache.js';
+import { loadCachedAsset, saveAssetTo, saveCachedAsset } from './asset-cache.js';
 import { planFromNLOpenAICompat } from './openai-compat.js';
 import { friendlyApiError } from './errors.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
@@ -104,7 +104,8 @@ export async function planScenePipeline(req: PlanReq, cfg: PipelineCfg): Promise
       rounds: 3,
     });
     if ('spec' in res) {
-      saveCachedAsset(res.spec);
+      if (req.assetWriteDir) saveAssetTo(res.spec, req.assetWriteDir);
+      else saveCachedAsset(res.spec);
       process.stderr.write(`terpix plan: generated asset '${el.name}'\n`);
     } else {
       process.stderr.write(`terpix plan: asset '${el.name}' skipped: ${res.error}\n`);

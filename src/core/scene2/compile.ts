@@ -75,42 +75,93 @@ function spread(n: number, step: number): number[] {
 
 // A motion's travel as start/end points (0..1, off-frame allowed) around a
 // base (bx, by). `perp` is the axis to spread `repeat` copies along (the one
-// the motion does NOT travel), so a row of movers fans out instead of stacking.
+// the motion does NOT primarily travel), so a row of movers fans out instead
+// of stacking. Supports 4 cardinal + 4 diagonal directions.
 type MotionKind = 'cross' | 'enter' | 'exit' | 'rise' | 'fall' | 'drift';
+type MotionDir =
+  | 'left' | 'right' | 'up' | 'down'
+  | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+const LO = -0.2;
+const HI = 1.2;
+
+// A direction's "edge anchor" point: a midpoint on an edge for cardinals, a
+// corner for diagonals. Used as the off-frame source/sink for enter/exit/cross.
+function edgePoint(dir: MotionDir, bx: number, by: number): { x: number; y: number } {
+  switch (dir) {
+    case 'left': return { x: LO, y: by };
+    case 'right': return { x: HI, y: by };
+    case 'up': return { x: bx, y: LO };
+    case 'down': return { x: bx, y: HI };
+    case 'top-left': return { x: LO, y: LO };
+    case 'top-right': return { x: HI, y: LO };
+    case 'bottom-left': return { x: LO, y: HI };
+    case 'bottom-right': return { x: HI, y: HI };
+  }
+}
+
+function oppositeDir(dir: MotionDir): MotionDir {
+  switch (dir) {
+    case 'left': return 'right';
+    case 'right': return 'left';
+    case 'up': return 'down';
+    case 'down': return 'up';
+    case 'top-left': return 'bottom-right';
+    case 'top-right': return 'bottom-left';
+    case 'bottom-left': return 'top-right';
+    case 'bottom-right': return 'top-left';
+  }
+}
+
+// Pick the perpendicular axis for fanning out `repeat` copies. Purely
+// horizontal motion (left/right) → fan on y. Vertical motion → fan on x.
+// Diagonals get whichever axis has the larger travel delta (or default x).
+function perpAxis(dir: MotionDir): 'x' | 'y' {
+  if (dir === 'left' || dir === 'right') return 'y';
+  if (dir === 'up' || dir === 'down') return 'x';
+  return 'x';
+}
+
 function motionPath(
   kind: MotionKind,
-  dir: 'left' | 'right' | 'up' | 'down' | undefined,
+  dirRaw: MotionDir | undefined,
   bx: number,
   by: number,
 ): { sx: number; sy: number; ex: number; ey: number; perp: 'x' | 'y' } {
-  const LO = -0.2;
-  const HI = 1.2;
   switch (kind) {
-    case 'cross':
-      if (dir === 'up') return { sx: bx, sy: HI, ex: bx, ey: LO, perp: 'x' };
-      if (dir === 'down') return { sx: bx, sy: LO, ex: bx, ey: HI, perp: 'x' };
-      if (dir === 'left') return { sx: HI, sy: by, ex: LO, ey: by, perp: 'y' };
-      return { sx: LO, sy: by, ex: HI, ey: by, perp: 'y' }; // right (default)
-    case 'enter':
-      if (dir === 'up') return { sx: bx, sy: HI, ex: bx, ey: by, perp: 'x' };
-      if (dir === 'down') return { sx: bx, sy: LO, ex: bx, ey: by, perp: 'x' };
-      if (dir === 'right') return { sx: HI, sy: by, ex: bx, ey: by, perp: 'y' };
-      return { sx: LO, sy: by, ex: bx, ey: by, perp: 'y' }; // from left (default)
-    case 'exit':
-      if (dir === 'up') return { sx: bx, sy: by, ex: bx, ey: LO, perp: 'x' };
-      if (dir === 'down') return { sx: bx, sy: by, ex: bx, ey: HI, perp: 'x' };
-      if (dir === 'left') return { sx: bx, sy: by, ex: LO, ey: by, perp: 'y' };
-      return { sx: bx, sy: by, ex: HI, ey: by, perp: 'y' }; // to right (default)
+    case 'cross': {
+      const dir: MotionDir = dirRaw ?? 'right';
+      // Travel FROM opposite edge/corner TO the dir's edge/corner (so dir
+      // names where the sprite is GOING).
+      const start = edgePoint(oppositeDir(dir), bx, by);
+      const end = edgePoint(dir, bx, by);
+      return { sx: start.x, sy: start.y, ex: end.x, ey: end.y, perp: perpAxis(dir) };
+    }
+    case 'enter': {
+      // From the named edge/corner to the base position.
+      const dir: MotionDir = dirRaw ?? 'left';
+      const start = edgePoint(dir, bx, by);
+      return { sx: start.x, sy: start.y, ex: bx, ey: by, perp: perpAxis(dir) };
+    }
+    case 'exit': {
+      const dir: MotionDir = dirRaw ?? 'right';
+      const end = edgePoint(dir, bx, by);
+      return { sx: bx, sy: by, ex: end.x, ey: end.y, perp: perpAxis(dir) };
+    }
     case 'rise':
       return { sx: bx, sy: by + 0.18, ex: bx, ey: by - 0.18, perp: 'x' };
     case 'fall':
       return { sx: bx, sy: by - 0.18, ex: bx, ey: by + 0.18, perp: 'x' };
     case 'drift': {
+      const dir: MotionDir = dirRaw ?? 'right';
       const d = 0.12;
-      if (dir === 'left') return { sx: bx, sy: by, ex: bx - d, ey: by, perp: 'y' };
-      if (dir === 'up') return { sx: bx, sy: by, ex: bx, ey: by - d, perp: 'x' };
-      if (dir === 'down') return { sx: bx, sy: by, ex: bx, ey: by + d, perp: 'x' };
-      return { sx: bx, sy: by, ex: bx + d, ey: by, perp: 'y' }; // right (default)
+      // Nudge by a small step in the dir's vector.
+      const e = edgePoint(dir, 0, 0); // unit-ish offset relative to (0,0)
+      // Normalize: cardinals → (±1, 0) or (0, ±1); diagonals → (±1, ±1).
+      // edgePoint returned in our LO/HI scale; reduce to sign.
+      const sgnX = e.x > 0 ? 1 : e.x < 0 ? -1 : 0;
+      const sgnY = e.y > 0 ? 1 : e.y < 0 ? -1 : 0;
+      return { sx: bx, sy: by, ex: bx + sgnX * d, ey: by + sgnY * d, perp: perpAxis(dir) };
     }
   }
 }

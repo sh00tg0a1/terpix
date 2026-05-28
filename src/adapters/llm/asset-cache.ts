@@ -26,7 +26,13 @@ export function loadCachedAsset(name: string): ShapeAssetFileT | undefined {
 }
 
 export function saveCachedAsset(spec: ShapeAssetFileT): void {
-  const dir = cacheDir();
+  saveAssetTo(spec, cacheDir());
+}
+
+// Write a generated shape asset to an arbitrary directory. Used by project
+// mode (`<proj>/assets/`) so a project's sprites travel with it instead of
+// living in the shared user cache.
+export function saveAssetTo(spec: ShapeAssetFileT, dir: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${keyFor(spec.name)}.json`), JSON.stringify(spec, null, 2));
 }

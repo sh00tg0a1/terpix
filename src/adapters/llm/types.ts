@@ -37,6 +37,12 @@ export interface PlanReq {
    * scenes depict objects beyond the fixed builtin catalog.
    */
   genAssets?: boolean;
+  /**
+   * When set, generated shape assets are written here instead of the global
+   * ~/.cache/terpix/assets/ dir. Project mode points this at <proj>/assets/
+   * so a project's custom sprites travel with it (reproducible re-renders).
+   */
+  assetWriteDir?: string;
   // Test injection points.
   client?: Anthropic;
   openaiClient?: OpenAI;

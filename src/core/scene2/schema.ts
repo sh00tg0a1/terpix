@@ -57,7 +57,16 @@ export const Distribute = z
 export const Motion = z
   .object({
     kind: z.enum(['cross', 'enter', 'exit', 'rise', 'fall', 'drift']),
-    dir: z.enum(['left', 'right', 'up', 'down']).optional(),
+    // 4 cardinal + 4 diagonals (matches `Align`). For cross/drift, `dir` is
+    // the direction of motion. For enter/exit, `dir` is the edge/corner.
+    // `top`/`bottom` arrive often from models — accept them as aliases for
+    // `up`/`down` rather than reject the whole plan.
+    dir: z
+      .preprocess(
+        (v) => (typeof v === 'string' ? (v === 'top' ? 'up' : v === 'bottom' ? 'down' : v) : v),
+        z.enum(['left', 'right', 'up', 'down', 'top-left', 'top-right', 'bottom-left', 'bottom-right']),
+      )
+      .optional(),
     ease: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).default('easeInOut'),
   })
   .optional();

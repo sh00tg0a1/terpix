@@ -6,6 +6,10 @@ import { render as renderToFile } from './commands/render.js';
 import { validatePlan } from './commands/validate-plan.js';
 import { parseDurationMs, planCmd } from './commands/plan.js';
 import { configCmd } from './commands/config-cmd.js';
+import { newProject } from './commands/new.js';
+import { sceneAdd } from './commands/scene-add.js';
+import { assetAdd } from './commands/asset-add.js';
+import { film } from './commands/film.js';
 import { registerBuiltins } from '../core/assets/builtin/index.js';
 import { listAssets } from '../core/assets/registry.js';
 import { loadUserAssets } from '../core/assets/loader.js';
@@ -189,19 +193,110 @@ program
     });
   });
 
-program
-  .command('asset')
-  .description('Inspect registered assets')
-  .argument('<subcommand>', 'list')
-  .action((subcommand: string) => {
-    if (subcommand !== 'list') {
-      console.error(`terpix asset: unknown subcommand '${subcommand}'. Try 'list'.`);
-      process.exit(1);
-    }
-    const rows = listAssets();
-    for (const entry of rows) {
+const assetCmd = program.command('asset').description('Manage assets (registered builtins + generated shapes)');
+assetCmd
+  .command('list')
+  .description('List every registered asset (name, source, description)')
+  .action(() => {
+    for (const entry of listAssets()) {
       console.log(`${entry.name.padEnd(14)} [${entry.source}]  ${entry.description}`);
     }
+  });
+assetCmd
+  .command('add')
+  .description('Generate a new shape sprite into <projdir>/assets/ via LLM')
+  .argument('<projdir>', 'path to a terpix project directory')
+  .argument('<name>', 'asset id (lowercase a-z, 0-9, -)')
+  .argument('<description...>', "one short line describing what it looks like")
+  .option('--model <id>', 'LLM model id (defaults to provider default)')
+  .option('--vision-model <id>', 'vision model to gate recognizability (e.g. qwen-vl-plus)')
+  .action(async (projdir: string, name: string, description: string[], opts: { model?: string; visionModel?: string }) => {
+    await assetAdd({
+      dir: projdir,
+      name,
+      description: description.join(' '),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
+    });
+  });
+
+program
+  .command('new')
+  .description('Scaffold a new terpix project (project.json + scenes/ + assets/)')
+  .argument('<dir>', 'directory to create')
+  .argument('[title]', 'human-readable title')
+  .option('--fps <n>', 'project fps', (v) => parseInt(v, 10))
+  .option('--size <WxH>', 'output dimensions (e.g. 1280x720)')
+  .option('--renderer <name>', 'half | ascii')
+  .option('--force', 'overwrite an existing project.json')
+  .action(async (
+    dir: string,
+    title: string | undefined,
+    opts: { fps?: number; size?: string; renderer?: string; force?: boolean },
+  ) => {
+    await newProject({
+      dir,
+      ...(title ? { title } : {}),
+      ...(opts.fps !== undefined ? { fps: opts.fps } : {}),
+      ...(opts.size ? { size: opts.size } : {}),
+      ...(opts.renderer ? { renderer: opts.renderer as 'half' | 'ascii' } : {}),
+      ...(opts.force ? { force: true } : {}),
+    });
+  });
+
+const sceneCmd = program.command('scene').description('Scene operations on a terpix project');
+sceneCmd
+  .command('add')
+  .description('Plan one new scene from NL and write it into <projdir>/scenes/')
+  .argument('<projdir>', 'terpix project directory')
+  .argument('<prompt...>', 'natural-language scene description')
+  .option('--duration <t>', 'scene duration (e.g. 6s, 800ms)', '6s')
+  .option('--model <id>', 'LLM model id')
+  .option('--style <name>', 'override scene style')
+  .option('--name <slug>', 'override the scene file name slug')
+  .option('--gen-assets', 'auto-generate any sprites the catalog lacks (into <projdir>/assets/)')
+  .action(async (
+    projdir: string,
+    prompt: string[],
+    opts: { duration?: string; model?: string; style?: string; name?: string; genAssets?: boolean },
+  ) => {
+    const r = await sceneAdd({
+      dir: projdir,
+      prompt: prompt.join(' '),
+      ...(opts.duration ? { duration: opts.duration } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.name ? { name: opts.name } : {}),
+      ...(opts.genAssets ? { genAssets: true } : {}),
+    });
+    if (!r.ok) {
+      console.error('terpix scene add: ' + r.error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('film')
+  .description('Direct + plan a whole film: LLM decomposes the idea into scenes, each is planned into <projdir>/scenes/')
+  .argument('<projdir>', 'terpix project directory')
+  .argument('<prompt...>', 'high-level film idea')
+  .option('--duration <t>', 'total film duration (e.g. 30s, 1m)', '30s')
+  .option('--scenes <n>', 'target number of scenes (1-8)', (v) => parseInt(v, 10))
+  .option('--model <id>', 'LLM model id')
+  .option('--gen-assets', 'auto-generate missing sprites per scene (into <projdir>/assets/)')
+  .action(async (
+    projdir: string,
+    prompt: string[],
+    opts: { duration?: string; scenes?: number; model?: string; genAssets?: boolean },
+  ) => {
+    await film({
+      dir: projdir,
+      prompt: prompt.join(' '),
+      ...(opts.duration ? { duration: opts.duration } : {}),
+      ...(opts.scenes !== undefined ? { scenes: opts.scenes } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.genAssets ? { genAssets: true } : {}),
+    });
   });
 
 program.parseAsync().catch((err: unknown) => {

@@ -27,7 +27,9 @@ export const Project = z.object({
     .default('1280x720'),
   renderer: z.enum(['half', 'ascii']).default('half'),
   audio: z.string().optional(),
-  scenes: z.array(SceneRef).min(1),
+  // May be empty in a freshly scaffolded project — render-time errors with a
+  // clear message instead of a schema rejection on read.
+  scenes: z.array(SceneRef).default([]),
 });
 
 export type ProjectT = z.infer<typeof Project>;

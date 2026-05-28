@@ -183,6 +183,14 @@ async function renderProject(opts: RenderOpts): Promise<void> {
   }
   const { project, scenes } = r.value;
 
+  if (scenes.length === 0) {
+    console.error(
+      `terpix render: project '${opts.input}' has no scenes — add one with: ` +
+        `terpix scene add ${opts.input} "<prompt>"`,
+    );
+    process.exit(1);
+  }
+
   // The mp4 path only handles the pixel renderer. Reject ascii clips early
   // with a clear message instead of crashing in the encoder.
   for (let i = 0; i < scenes.length; i++) {

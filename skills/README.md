@@ -7,9 +7,9 @@ capabilities (Claude's existing Read/Edit/Bash tools do the work).
 
 ## Skills in this repo
 
-| Skill | What it teaches |
-|---|---|
-| [`terpix-film/`](terpix-film/SKILL.md) | Directing terpix to make short films from natural language: scaffold projects, plan/decompose scenes, generate sprites, iterate on bad frames, render to mp4. |
+- [`terpix-film/`](terpix-film/SKILL.md) — Directing terpix to make short films
+  from natural language (bilingual EN + 中文): scaffold projects, plan /
+  decompose scenes, generate sprites, iterate on bad frames, render to mp4.
 
 ## Install
 

@@ -31,7 +31,52 @@ CRITICAL for recognizability:
    for parts meant to recolor with the scene.
 3. Light from upper-left -> lighter up-left, darker down-right, for volume.
 4. Add the 1-2 features that MAKE it that object. 10-22 primitives, fill ~85%.
-- anchor: "bottom" if it rests on a surface, else "center".`;
+5. VIEW = SIDE PROFILE by default. Animals, furniture, vehicles, vessels, tools
+   are most recognizable from the side (a cat in profile shows ear, eye-line,
+   tail; a teapot in profile shows spout + handle). Pick top-down or front-on
+   ONLY when the description explicitly says so. Side profile = one ear / one
+   eye-line / tail or limbs ON ONE SIDE — never symmetric front-facing.
+6. ORGANIC SUBJECTS need ALL of: a distinct HEAD shape attached to but
+   separate from the body, AT LEAST ONE visible appendage (ear, tail, paw,
+   fin, wing), and AT LEAST ONE eye marker (a line, dot, or arc — even
+   closed). Without these the sprite reads as a featureless blob.
+7. ANTI-PATTERN: a single rounded shape with no head / no tail / no ears is
+   not "an animal" — it is a pebble. Build the structural parts FIRST, then
+   surface detail (stripes, highlights). Never submit a sprite whose only
+   identifying feature is its color.
+- anchor: "bottom" if it rests on a surface, else "center".
+
+## Two side-view examples (study the structure, do not copy literally)
+
+A curled sleeping cat — note the separate head ellipse, visible ear triangle,
+tail polygon curling back to the front, closed-eye line, body stripe:
+{ "name":"ex-cat", "description":"side profile of a curled sleeping cat",
+  "viewBox":{"w":100,"h":60}, "anchor":"bottom",
+  "primitives":[
+    {"kind":"ellipse","cx":52,"cy":40,"rx":36,"ry":14,"color":"#e8852a"},
+    {"kind":"ellipse","cx":22,"cy":32,"rx":13,"ry":11,"color":"#e8852a"},
+    {"kind":"triangle","points":[[10,18],[20,22],[14,12]],"color":"#e8852a"},
+    {"kind":"polygon","points":[[80,42],[96,30],[88,52],[60,44]],"color":"#e8852a"},
+    {"kind":"ellipse","cx":52,"cy":46,"rx":28,"ry":7,"color":"#ffd9b0"},
+    {"kind":"rect","x":36,"y":36,"w":22,"h":3,"color":"#ffffff"},
+    {"kind":"line","from":[14,29],"to":[24,29],"color":"#3a1f10","thickness":1},
+    {"kind":"circle","cx":12,"cy":33,"r":1.5,"color":"#ff80a0"}
+  ] }
+
+A teapot — note the spout polygon on the right and the handle cutout on the
+left make the silhouette read as a teapot, not a bag:
+{ "name":"ex-teapot", "description":"side profile of a teapot",
+  "viewBox":{"w":100,"h":80}, "anchor":"bottom",
+  "primitives":[
+    {"kind":"polygon","points":[[20,66],[80,66],[86,30],[14,30]],"color":"#c4a060"},
+    {"kind":"polygon","points":[[85,40],[100,34],[95,56]],"color":"#c4a060"},
+    {"kind":"polygon","points":[[14,40],[2,46],[2,56],[14,56]],"color":"#c4a060"},
+    {"kind":"polygon","points":[[12,43],[6,48],[6,54],[12,54]],"color":"#3a1f10"},
+    {"kind":"ellipse","cx":50,"cy":28,"rx":18,"ry":5,"color":"#c4a060"},
+    {"kind":"circle","cx":50,"cy":22,"r":4,"color":"#c4a060"},
+    {"kind":"rect","x":25,"y":50,"w":50,"h":3,"color":"#f0e0a0"}
+  ] }
+`;
 
 export interface AssetGenCfg {
   client: OpenAI;

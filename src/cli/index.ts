@@ -209,14 +209,22 @@ assetCmd
   .argument('<name>', 'asset id (lowercase a-z, 0-9, -)')
   .argument('<description...>', "one short line describing what it looks like")
   .option('--model <id>', 'LLM model id (defaults to provider default)')
-  .option('--vision-model <id>', 'vision model to gate recognizability (e.g. qwen-vl-plus)')
-  .action(async (projdir: string, name: string, description: string[], opts: { model?: string; visionModel?: string }) => {
+  .option('--vision-model <id>', 'override the recognizability vision model (default: qwen-vl-plus on qwen, gpt-4o-mini on openai)')
+  .option('--no-vision', 'skip the vision recognizability gate (faster, cheaper, less reliable)')
+  .action(async (
+    projdir: string,
+    name: string,
+    description: string[],
+    opts: { model?: string; visionModel?: string; vision?: boolean },
+  ) => {
+    // Commander turns --no-vision into vision=false.
     await assetAdd({
       dir: projdir,
       name,
       description: description.join(' '),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
+      ...(opts.vision === false ? { noVision: true } : {}),
     });
   });
 

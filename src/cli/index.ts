@@ -91,13 +91,22 @@ program
   .option('--vision-model <id>', 'vision-LLM id for the in-loop frame critic (e.g. qwen-vl-plus). When set, the planner renders a preview frame, asks this model what to fix, and retries.')
   .option('--vision-rounds <n>', 'max vision-critic retries (default 1)', '1')
   .option('--visual-fewshot', 'prepend rendered reference frames + their JSON to the prompt (requires a vision-capable planner model, e.g. qwen-plus)')
-  .option('--gen-assets', 'generate scene-specific sprites (shape-json) for objects not in the builtin catalog before composing; --vision-model gates them for recognizability')
-  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string; visionModel?: string; visionRounds?: string; visualFewshot?: boolean; genAssets?: boolean }) => {
+  .option('--gen-assets', 'generate scene-specific sprites for objects not in the builtin catalog before composing; --vision-model gates them for recognizability')
+  .option('--asset-mode <mode>', 'sprite generation mode for --gen-assets: shape (LLM primitives, recolors) | image (Qwen-Image PNG, bitmap)', 'shape')
+  .option('--image-model <id>', 'Qwen-Image model id for --asset-mode image (default qwen-image-2.0-pro)')
+  .option('--image-size <WxH>', 'Qwen-Image canvas size, e.g. 1328*1328 (default), 1664*928, 928*1664')
+  .option('--image-max-side <n>', 'max side (px) of the cooked sprite stored on disk (default 96)', (v) => parseInt(v, 10))
+  .action(async (prompt: string, opts: { duration: string; out?: string; model?: string; renderer?: string; style?: string; visionModel?: string; visionRounds?: string; visualFewshot?: boolean; genAssets?: boolean; assetMode?: string; imageModel?: string; imageSize?: string; imageMaxSide?: number }) => {
     let durationMs: number;
     try {
       durationMs = parseDurationMs(opts.duration);
     } catch (err) {
       console.error(`terpix plan: ${(err as Error).message}`);
+      process.exit(1);
+    }
+    const assetMode = opts.assetMode === 'image' ? 'image' : opts.assetMode === 'shape' ? 'shape' : undefined;
+    if (opts.assetMode && !assetMode) {
+      console.error(`terpix plan: --asset-mode must be 'shape' or 'image'`);
       process.exit(1);
     }
     await planCmd({
@@ -111,6 +120,10 @@ program
       ...(opts.visionRounds ? { visionRounds: parseInt(opts.visionRounds, 10) } : {}),
       ...(opts.visualFewshot ? { visualFewShot: true } : {}),
       ...(opts.genAssets ? { genAssets: true } : {}),
+      ...(assetMode ? { assetMode } : {}),
+      ...(opts.imageModel ? { imageModel: opts.imageModel } : {}),
+      ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { imageMaxSide: opts.imageMaxSide } : {}),
     });
   });
 
@@ -211,13 +224,22 @@ assetCmd
   .option('--model <id>', 'LLM model id (defaults to provider default)')
   .option('--vision-model <id>', 'override the recognizability vision model (default: qwen-vl-plus on qwen, gpt-4o-mini on openai)')
   .option('--no-vision', 'skip the vision recognizability gate (faster, cheaper, less reliable)')
+  .option('--asset-mode <mode>', 'sprite generation mode: shape (default) | image (Qwen-Image PNG → bitmap)', 'shape')
+  .option('--image-model <id>', 'Qwen-Image model id for --asset-mode image')
+  .option('--image-size <WxH>', 'Qwen-Image canvas size, e.g. 1328*1328')
+  .option('--image-max-side <n>', 'cooked sprite max side (px), default 96', (v) => parseInt(v, 10))
   .action(async (
     projdir: string,
     name: string,
     description: string[],
-    opts: { model?: string; visionModel?: string; vision?: boolean },
+    opts: { model?: string; visionModel?: string; vision?: boolean; assetMode?: string; imageModel?: string; imageSize?: string; imageMaxSide?: number },
   ) => {
     // Commander turns --no-vision into vision=false.
+    const assetMode = opts.assetMode === 'image' ? 'image' : opts.assetMode === 'shape' ? 'shape' : undefined;
+    if (opts.assetMode && !assetMode) {
+      console.error(`terpix asset add: --asset-mode must be 'shape' or 'image'`);
+      process.exit(1);
+    }
     await assetAdd({
       dir: projdir,
       name,
@@ -225,6 +247,10 @@ assetCmd
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
       ...(opts.vision === false ? { noVision: true } : {}),
+      ...(assetMode ? { assetMode } : {}),
+      ...(opts.imageModel ? { imageModel: opts.imageModel } : {}),
+      ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { imageMaxSide: opts.imageMaxSide } : {}),
     });
   });
 
@@ -263,11 +289,20 @@ sceneCmd
   .option('--style <name>', 'override scene style')
   .option('--name <slug>', 'override the scene file name slug')
   .option('--gen-assets', 'auto-generate any sprites the catalog lacks (into <projdir>/assets/)')
+  .option('--asset-mode <mode>', 'sprite generation mode for --gen-assets: shape | image', 'shape')
+  .option('--image-model <id>', 'Qwen-Image model id for --asset-mode image')
+  .option('--image-size <WxH>', 'Qwen-Image canvas size, e.g. 1328*1328')
+  .option('--image-max-side <n>', 'cooked sprite max side (px), default 96', (v) => parseInt(v, 10))
   .action(async (
     projdir: string,
     prompt: string[],
-    opts: { duration?: string; model?: string; style?: string; name?: string; genAssets?: boolean },
+    opts: { duration?: string; model?: string; style?: string; name?: string; genAssets?: boolean; assetMode?: string; imageModel?: string; imageSize?: string; imageMaxSide?: number },
   ) => {
+    const assetMode = opts.assetMode === 'image' ? 'image' : opts.assetMode === 'shape' ? 'shape' : undefined;
+    if (opts.assetMode && !assetMode) {
+      console.error(`terpix scene add: --asset-mode must be 'shape' or 'image'`);
+      process.exit(1);
+    }
     const r = await sceneAdd({
       dir: projdir,
       prompt: prompt.join(' '),
@@ -276,6 +311,10 @@ sceneCmd
       ...(opts.style ? { style: opts.style } : {}),
       ...(opts.name ? { name: opts.name } : {}),
       ...(opts.genAssets ? { genAssets: true } : {}),
+      ...(assetMode ? { assetMode } : {}),
+      ...(opts.imageModel ? { imageModel: opts.imageModel } : {}),
+      ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { imageMaxSide: opts.imageMaxSide } : {}),
     });
     if (!r.ok) {
       console.error('terpix scene add: ' + r.error);
@@ -292,11 +331,20 @@ program
   .option('--scenes <n>', 'target number of scenes (1-8)', (v) => parseInt(v, 10))
   .option('--model <id>', 'LLM model id')
   .option('--gen-assets', 'auto-generate missing sprites per scene (into <projdir>/assets/)')
+  .option('--asset-mode <mode>', 'sprite generation mode for --gen-assets: shape | image', 'shape')
+  .option('--image-model <id>', 'Qwen-Image model id for --asset-mode image')
+  .option('--image-size <WxH>', 'Qwen-Image canvas size, e.g. 1328*1328')
+  .option('--image-max-side <n>', 'cooked sprite max side (px), default 96', (v) => parseInt(v, 10))
   .action(async (
     projdir: string,
     prompt: string[],
-    opts: { duration?: string; scenes?: number; model?: string; genAssets?: boolean },
+    opts: { duration?: string; scenes?: number; model?: string; genAssets?: boolean; assetMode?: string; imageModel?: string; imageSize?: string; imageMaxSide?: number },
   ) => {
+    const assetMode = opts.assetMode === 'image' ? 'image' : opts.assetMode === 'shape' ? 'shape' : undefined;
+    if (opts.assetMode && !assetMode) {
+      console.error(`terpix film: --asset-mode must be 'shape' or 'image'`);
+      process.exit(1);
+    }
     await film({
       dir: projdir,
       prompt: prompt.join(' '),
@@ -304,6 +352,10 @@ program
       ...(opts.scenes !== undefined ? { scenes: opts.scenes } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.genAssets ? { genAssets: true } : {}),
+      ...(assetMode ? { assetMode } : {}),
+      ...(opts.imageModel ? { imageModel: opts.imageModel } : {}),
+      ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { imageMaxSide: opts.imageMaxSide } : {}),
     });
   });
 

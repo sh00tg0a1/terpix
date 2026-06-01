@@ -15,6 +15,10 @@ export interface FilmOpts {
   scenes?: number;
   model?: string;
   genAssets?: boolean;
+  assetMode?: 'shape' | 'image';
+  imageModel?: string;
+  imageSize?: string;
+  imageMaxSide?: number;
 }
 
 const FilmPlan = z.object({
@@ -143,6 +147,10 @@ export async function film(opts: FilmOpts): Promise<void> {
       name: s.name,
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.genAssets !== undefined ? { genAssets: opts.genAssets } : {}),
+      ...(opts.assetMode ? { assetMode: opts.assetMode } : {}),
+      ...(opts.imageModel ? { imageModel: opts.imageModel } : {}),
+      ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { imageMaxSide: opts.imageMaxSide } : {}),
     });
     if (res.ok) ok++;
     else {

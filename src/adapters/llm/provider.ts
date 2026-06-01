@@ -108,6 +108,31 @@ export async function planFromNL(req: PlanReq & { provider?: ProviderNameT }): P
   }
 }
 
+// Image-mode (Qwen-Image) needs a DashScope API key independent of the scene-
+// LLM provider — the user might run Anthropic/OpenAI as the planner while
+// generating sprites on Qwen. Returns the resolved imageGen config or a
+// human-readable error.
+export function resolveImageGen(opts: {
+  model?: string;
+  size?: string;
+  maxSide?: number;
+} = {}): NonNullable<PlanReq['imageGen']> | { error: string } {
+  const k = getQwenApiKey();
+  if (!k) {
+    return {
+      error:
+        'image asset mode requires a DashScope key. ' +
+        'Set with: terpix config set qwen_api_key sk-... (or env DASHSCOPE_API_KEY)',
+    };
+  }
+  return {
+    apiKey: k,
+    model: opts.model ?? 'qwen-image-2.0-pro',
+    size: opts.size ?? '1328*1328',
+    ...(opts.maxSide ? { maxSide: opts.maxSide } : {}),
+  };
+}
+
 export function activeProviderLabel(): string {
   const p = getProvider();
   const r = resolveProvider(p);

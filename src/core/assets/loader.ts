@@ -1,7 +1,14 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { makeShapeAsciiDrawer, makeShapeDrawer, parseShapeJson } from './formats/shape.js';
+import {
+  BitmapMeta,
+  decodePng,
+  makeBitmapAsciiDrawer,
+  makeBitmapDrawer,
+  type BitmapAsset,
+} from './formats/bitmap.js';
 import { registerAsset } from './registry.js';
 
 export interface LoadReport {
@@ -58,11 +65,68 @@ export function loadUserAssets(opts: LoadOpts = {}): LoadReport {
     for (const name of entries) {
       const path = join(dir, name);
       const ext = extname(name).toLowerCase();
-      if (ext === '.json') loadShapeFile(path, report);
-      // .png and .ts deferred to later phases
+      // Bitmap sidecar files end in `.bitmap.json`; they're loaded together
+      // with their .png pair (below), not as shape-json.
+      if (ext === '.json' && !name.toLowerCase().endsWith('.bitmap.json')) {
+        loadShapeFile(path, report);
+      } else if (ext === '.png') {
+        loadBitmapFile(dir, name, report);
+      }
+      // .ts deferred to later phases
     }
   }
   return report;
+}
+
+function loadBitmapFile(dir: string, pngName: string, report: LoadReport): void {
+  const png = join(dir, pngName);
+  const stem = basename(pngName, extname(pngName));
+  const sidecar = join(dir, `${stem}.bitmap.json`);
+  if (!existsSync(sidecar)) {
+    // A bare .png without a sidecar isn't a registered asset (might be
+    // a screenshot, render target, etc.). Skip silently.
+    return;
+  }
+  let metaRaw: unknown;
+  try {
+    metaRaw = JSON.parse(readFileSync(sidecar, 'utf8'));
+  } catch (err) {
+    report.errors.push({ path: sidecar, messages: [`bad JSON: ${(err as Error).message}`] });
+    return;
+  }
+  const parsed = BitmapMeta.safeParse(metaRaw);
+  if (!parsed.success) {
+    report.errors.push({
+      path: sidecar,
+      messages: parsed.error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`),
+    });
+    return;
+  }
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(png);
+  } catch (err) {
+    report.errors.push({ path: png, messages: [`read failed: ${(err as Error).message}`] });
+    return;
+  }
+  let decoded: { w: number; h: number; rgba: Uint8Array };
+  try {
+    decoded = decodePng(bytes);
+  } catch (err) {
+    report.errors.push({ path: png, messages: [`PNG decode: ${(err as Error).message}`] });
+    return;
+  }
+  const asset: BitmapAsset = { meta: parsed.data, w: decoded.w, h: decoded.h, rgba: decoded.rgba };
+  registerAsset({
+    name: parsed.data.name,
+    description: parsed.data.description,
+    source: 'bitmap',
+    origin: png,
+    metrics: { aspect: asset.w / asset.h, anchor: parsed.data.anchor },
+    draw: makeBitmapDrawer(asset),
+    drawAscii: makeBitmapAsciiDrawer(asset),
+  });
+  report.loaded.push({ name: parsed.data.name, source: 'bitmap', origin: png });
 }
 
 function loadShapeFile(path: string, report: LoadReport): void {

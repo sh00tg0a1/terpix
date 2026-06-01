@@ -2,9 +2,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import OpenAI from 'openai';
 import { isProjectDir } from '../../core/project/loader.js';
-import { resolveProvider } from '../../adapters/llm/provider.js';
+import { resolveImageGen, resolveProvider } from '../../adapters/llm/provider.js';
 import { generateAsset } from '../../adapters/llm/asset-gen.js';
-import { saveAssetTo } from '../../adapters/llm/asset-cache.js';
+import { generateImageAsset } from '../../adapters/llm/asset-gen-image.js';
+import { saveAssetTo, saveBitmapTo } from '../../adapters/llm/asset-cache.js';
 
 export interface AssetAddOpts {
   dir: string;
@@ -13,6 +14,10 @@ export interface AssetAddOpts {
   model?: string;
   visionModel?: string;
   noVision?: boolean;
+  assetMode?: 'shape' | 'image';
+  imageModel?: string;
+  imageSize?: string;
+  imageMaxSide?: number;
 }
 
 // Vision-model defaults per provider. The recognizability gate uses the same
@@ -91,6 +96,33 @@ export async function assetAdd(opts: AssetAddOpts): Promise<void> {
     process.stderr.write(`terpix asset add: vision gate = ${visionModel}\n`);
   }
   process.stderr.write(`terpix asset add: generating '${name}' (${opts.description})...\n`);
+
+  if (opts.assetMode === 'image') {
+    const r = resolveImageGen({
+      ...(opts.imageModel ? { model: opts.imageModel } : {}),
+      ...(opts.imageSize ? { size: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { maxSide: opts.imageMaxSide } : {}),
+    });
+    if ('error' in r) {
+      console.error('terpix asset add: ' + r.error);
+      process.exit(1);
+    }
+    process.stderr.write(`terpix asset add: image mode (model=${r.model}, size=${r.size})\n`);
+    const out = await generateImageAsset(name, opts.description, {
+      qwen: r,
+      ...(visionModel ? { visionClient: client, visionModel } : {}),
+      rounds: 2,
+      ...(r.maxSide ? { maxSide: r.maxSide } : {}),
+    });
+    if ('error' in out) {
+      console.error('terpix asset add: ' + out.error);
+      process.exit(1);
+    }
+    saveBitmapTo(out.asset.meta, out.png, assetsDir);
+    process.stderr.write(`terpix asset add: wrote ${assetsDir}/${name}.png (+ ${name}.bitmap.json)\n`);
+    return;
+  }
+
   const res = await generateAsset(name, opts.description, {
     client,
     genModel: model,

@@ -3,7 +3,19 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { getAsset, listAssets } from '../../core/assets/registry.js';
 import { generateAsset, registerShape } from './asset-gen.js';
-import { loadCachedAsset, saveAssetTo, saveCachedAsset } from './asset-cache.js';
+import {
+  generateImageAsset,
+  registerBitmap,
+} from './asset-gen-image.js';
+import {
+  loadCachedAsset,
+  loadCachedBitmap,
+  loadBitmapFromDir,
+  saveAssetTo,
+  saveBitmapTo,
+  saveCachedAsset,
+  saveCachedBitmap,
+} from './asset-cache.js';
 import { planFromNLOpenAICompat } from './openai-compat.js';
 import { friendlyApiError } from './errors.js';
 import type { PlanReq, PlanOk, PlanErr } from './types.js';
@@ -70,10 +82,76 @@ async function planElements(
   }
 }
 
+/** SHAPE-mode element generation: LLM emits primitives, vision-critic gates. */
+async function fulfillElementShape(
+  el: { name: string; description: string },
+  client: OpenAI,
+  model: string,
+  req: PlanReq,
+): Promise<void> {
+  const cached = loadCachedAsset(el.name);
+  if (cached) {
+    registerShape(cached, '<cache>');
+    process.stderr.write(`terpix plan: asset '${el.name}' from cache\n`);
+    return;
+  }
+  const res = await generateAsset(el.name, el.description, {
+    client,
+    genModel: model,
+    ...(req.vision ? { visionModel: req.vision.model } : {}),
+    rounds: 3,
+  });
+  if ('spec' in res) {
+    if (req.assetWriteDir) saveAssetTo(res.spec, req.assetWriteDir);
+    else saveCachedAsset(res.spec);
+    process.stderr.write(`terpix plan: generated asset '${el.name}' (shape)\n`);
+  } else {
+    process.stderr.write(`terpix plan: asset '${el.name}' skipped: ${res.error}\n`);
+  }
+}
+
+/** IMAGE-mode element generation: Qwen-Image PNG → cooked bitmap, vision-critic gates. */
+async function fulfillElementImage(
+  el: { name: string; description: string },
+  client: OpenAI,
+  req: PlanReq,
+): Promise<void> {
+  if (!req.imageGen) {
+    process.stderr.write(`terpix plan: asset '${el.name}' skipped: image mode needs imageGen config\n`);
+    return;
+  }
+  const cached = req.assetWriteDir
+    ? loadBitmapFromDir(req.assetWriteDir, el.name) ?? loadCachedBitmap(el.name)
+    : loadCachedBitmap(el.name);
+  if (cached) {
+    registerBitmap(cached, '<cache>');
+    process.stderr.write(`terpix plan: asset '${el.name}' from cache (bitmap)\n`);
+    return;
+  }
+  const qwen = {
+    apiKey: req.imageGen.apiKey,
+    ...(req.imageGen.model ? { model: req.imageGen.model } : {}),
+    ...(req.imageGen.baseURL ? { baseURL: req.imageGen.baseURL } : {}),
+    ...(req.imageGen.size ? { size: req.imageGen.size } : {}),
+  };
+  const res = await generateImageAsset(el.name, el.description, {
+    qwen,
+    ...(req.vision ? { visionClient: client, visionModel: req.vision.model } : {}),
+    rounds: 2,
+    ...(req.imageGen.maxSide ? { maxSide: req.imageGen.maxSide } : {}),
+  });
+  if ('asset' in res) {
+    if (req.assetWriteDir) saveBitmapTo(res.asset.meta, res.png, req.assetWriteDir);
+    else saveCachedBitmap(res.asset.meta, res.png);
+    process.stderr.write(`terpix plan: generated asset '${el.name}' (bitmap)\n`);
+  } else {
+    process.stderr.write(`terpix plan: asset '${el.name}' skipped: ${res.error}\n`);
+  }
+}
+
 /**
- * Asset-generation pipeline: plan elements -> generate/cache the ones missing
- * from the registry as procedural shape sprites -> compose the scene (reusing
- * the v2 planner, which now sees the generated assets in its catalog).
+ * Asset-generation pipeline: plan elements -> generate/cache the missing ones
+ * (shape-json OR Qwen-Image bitmap, per req.assetMode) -> compose the scene.
  */
 export async function planScenePipeline(req: PlanReq, cfg: PipelineCfg): Promise<PlanOk | PlanErr> {
   const client =
@@ -89,27 +167,11 @@ export async function planScenePipeline(req: PlanReq, cfg: PipelineCfg): Promise
   }
   process.stderr.write(`terpix plan: elements → ${elements.map((e) => e.name).join(', ') || '(none)'}\n`);
 
+  const mode = req.assetMode ?? 'shape';
   for (const el of elements) {
     if (getAsset(el.name)) continue; // builtin or already generated
-    const cached = loadCachedAsset(el.name);
-    if (cached) {
-      registerShape(cached, '<cache>');
-      process.stderr.write(`terpix plan: asset '${el.name}' from cache\n`);
-      continue;
-    }
-    const res = await generateAsset(el.name, el.description, {
-      client,
-      genModel: model,
-      ...(req.vision ? { visionModel: req.vision.model } : {}),
-      rounds: 3,
-    });
-    if ('spec' in res) {
-      if (req.assetWriteDir) saveAssetTo(res.spec, req.assetWriteDir);
-      else saveCachedAsset(res.spec);
-      process.stderr.write(`terpix plan: generated asset '${el.name}'\n`);
-    } else {
-      process.stderr.write(`terpix plan: asset '${el.name}' skipped: ${res.error}\n`);
-    }
+    if (mode === 'image') await fulfillElementImage(el, client, req);
+    else await fulfillElementShape(el, client, model, req);
   }
 
   // Compose: the v2 planner now sees generated assets in its catalog. The

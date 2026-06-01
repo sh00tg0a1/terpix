@@ -38,6 +38,21 @@ export interface PlanReq {
    */
   genAssets?: boolean;
   /**
+   * How `genAssets` produces sprites:
+   * - 'shape' (default): LLM emits shape-json primitives (cheap, recolors).
+   * - 'image': Qwen-Image generates a small PNG, white-keyed and downsampled
+   *   into a bitmap sprite (better identity, fixed colors, no recolor).
+   */
+  assetMode?: 'shape' | 'image';
+  /** Image-mode generation config; required when assetMode = 'image'. */
+  imageGen?: {
+    apiKey: string;
+    model?: string;
+    baseURL?: string;
+    size?: string;
+    maxSide?: number;
+  };
+  /**
    * When set, generated shape assets are written here instead of the global
    * ~/.cache/terpix/assets/ dir. Project mode points this at <proj>/assets/
    * so a project's custom sprites travel with it (reproducible re-renders).

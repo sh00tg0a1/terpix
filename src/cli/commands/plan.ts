@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { planFromNL, hasLLMKey, resolveProvider } from '../../adapters/llm/provider.js';
+import { planFromNL, hasLLMKey, resolveImageGen, resolveProvider } from '../../adapters/llm/provider.js';
 
 export interface PlanCommandOpts {
   prompt: string;
@@ -12,6 +12,10 @@ export interface PlanCommandOpts {
   visionRounds?: number;
   visualFewShot?: boolean;
   genAssets?: boolean;
+  assetMode?: 'shape' | 'image';
+  imageModel?: string;
+  imageSize?: string;
+  imageMaxSide?: number;
 }
 
 export function parseDurationMs(raw: string): number {
@@ -59,6 +63,25 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     }
   }
 
+  // Image-mode genAssets requires a DashScope key. Resolve it up front so we
+  // fail with a clear message rather than partway through scene composition.
+  let imageGen: { apiKey: string; model?: string; baseURL?: string; size?: string; maxSide?: number } | undefined;
+  if (opts.genAssets && opts.assetMode === 'image') {
+    const r = resolveImageGen({
+      ...(opts.imageModel ? { model: opts.imageModel } : {}),
+      ...(opts.imageSize ? { size: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { maxSide: opts.imageMaxSide } : {}),
+    });
+    if ('error' in r) {
+      console.error('terpix plan: ' + r.error);
+      process.exit(2);
+    }
+    imageGen = r;
+    process.stderr.write(
+      `terpix plan: image asset mode (model=${imageGen.model}, size=${imageGen.size})\n`,
+    );
+  }
+
   process.stderr.write('terpix plan: calling LLM...\n');
   const result = await planFromNL({
     prompt: opts.prompt,
@@ -69,6 +92,8 @@ export async function planCmd(opts: PlanCommandOpts): Promise<void> {
     ...(vision ? { vision } : {}),
     ...(opts.visualFewShot ? { visualFewShot: true } : {}),
     ...(opts.genAssets ? { genAssets: true } : {}),
+    ...(opts.assetMode ? { assetMode: opts.assetMode } : {}),
+    ...(imageGen ? { imageGen } : {}),
   });
 
   if (!result.ok) {

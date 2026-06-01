@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isProjectDir, loadProject } from '../../core/project/loader.js';
-import { planFromNL } from '../../adapters/llm/provider.js';
+import { planFromNL, resolveImageGen } from '../../adapters/llm/provider.js';
 import { parseDurationMs } from './plan.js';
 
 export interface SceneAddOpts {
@@ -12,6 +12,10 @@ export interface SceneAddOpts {
   style?: string;
   name?: string;
   genAssets?: boolean;
+  assetMode?: 'shape' | 'image';
+  imageModel?: string;
+  imageSize?: string;
+  imageMaxSide?: number;
 }
 
 // kebab-case slug, keeping CJK so a "晚餐场景" filename stays meaningful.
@@ -57,6 +61,16 @@ export async function sceneAdd(opts: SceneAddOpts): Promise<SceneAddResult> {
 
   const durationMs = opts.duration ? parseDurationMs(opts.duration) : 6000;
   const assetWriteDir = join(opts.dir, 'assets');
+  let imageGen: { apiKey: string; model?: string; baseURL?: string; size?: string; maxSide?: number } | undefined;
+  if (opts.genAssets && opts.assetMode === 'image') {
+    const r = resolveImageGen({
+      ...(opts.imageModel ? { model: opts.imageModel } : {}),
+      ...(opts.imageSize ? { size: opts.imageSize } : {}),
+      ...(opts.imageMaxSide !== undefined ? { maxSide: opts.imageMaxSide } : {}),
+    });
+    if ('error' in r) return { ok: false, error: r.error };
+    imageGen = r;
+  }
   process.stderr.write(`terpix scene add: planning "${opts.prompt}" (${durationMs}ms)...\n`);
   const res = await planFromNL({
     prompt: opts.prompt,
@@ -65,6 +79,8 @@ export async function sceneAdd(opts: SceneAddOpts): Promise<SceneAddResult> {
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.style ? { style: opts.style } : {}),
     ...(opts.genAssets !== undefined ? { genAssets: opts.genAssets } : {}),
+    ...(opts.assetMode ? { assetMode: opts.assetMode } : {}),
+    ...(imageGen ? { imageGen } : {}),
   });
   if (!res.ok) return { ok: false, error: res.error };
 

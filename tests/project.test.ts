@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isProjectDir, loadProject, loadScene } from '../src/core/project/loader.js';
 import { sequence, totalDurationMs } from '../src/core/project/sequencer.js';
-import { clearRegistry } from '../src/core/assets/registry.js';
+import { clearRegistry, getAsset } from '../src/core/assets/registry.js';
 import { registerBuiltins } from '../src/core/assets/builtin/index.js';
 import type { ScenePlanT } from '../src/core/dsl.js';
 
@@ -77,6 +77,42 @@ describe('project loader', () => {
     if (r.ok) {
       expect(r.value.scenes).toHaveLength(2);
       expect(totalDurationMs(r.value.scenes)).toBe(3000);
+    }
+  });
+
+  it('loadProject ISOLATES from the global ~/.cache (stale generated assets stay out)', () => {
+    // Point the global cache dir at a temp location and drop a fake spec
+    // there. It looks like a stray sprite from some past `--gen-assets` run.
+    const fakeCache = mkdtempSync(join(tmpdir(), 'terpix-cache-'));
+    mkdirSync(join(fakeCache, 'terpix', 'assets'), { recursive: true });
+    writeFileSync(
+      join(fakeCache, 'terpix', 'assets', 'leftover.json'),
+      JSON.stringify({
+        name: 'leftover',
+        description: 'a stray sprite from an unrelated past run',
+        viewBox: { w: 10, h: 10 },
+        anchor: 'center',
+        primitives: [{ kind: 'circle', cx: 5, cy: 5, r: 4, color: '#ff0000' }],
+      }),
+    );
+    const prevCache = process.env['XDG_CACHE_HOME'];
+    process.env['XDG_CACHE_HOME'] = fakeCache;
+    try {
+      mkdirSync(join(dir, 'scenes'));
+      writeFileSync(join(dir, 'scenes', 'a.json'), JSON.stringify(minimalV1('a', 1000)));
+      writeFileSync(
+        join(dir, 'project.json'),
+        JSON.stringify({ scenes: [{ file: 'scenes/a.json' }] }),
+      );
+      const r = loadProject(dir);
+      expect(r.ok).toBe(true);
+      // The stray cached asset MUST NOT be in the registry after the project
+      // reset. (A non-project `loadUserAssets()` call would still pick it
+      // up — that path stays compatible.)
+      expect(getAsset('leftover')).toBeUndefined();
+    } finally {
+      if (prevCache === undefined) delete process.env['XDG_CACHE_HOME'];
+      else process.env['XDG_CACHE_HOME'] = prevCache;
     }
   });
 

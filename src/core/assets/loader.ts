@@ -13,9 +13,16 @@ export interface LoadReport {
 export interface LoadOpts {
   extraDirs?: string[];
   allowPlugins?: boolean;
+  /**
+   * Skip the global `~/.cache/terpix/assets/` dir. Project mode passes this
+   * so a project's renders are reproducible — they only see project-local
+   * assets plus the read-only built-in catalog, not whatever was generated
+   * by some unrelated past run.
+   */
+  noGlobalCache?: boolean;
 }
 
-export function defaultAssetDirs(): string[] {
+export function defaultAssetDirs(opts: { noGlobalCache?: boolean } = {}): string[] {
   const dirs: string[] = [];
   dirs.push('./terpix-assets');
   const envDirs = process.env['TERPIX_ASSET_DIRS'];
@@ -23,16 +30,22 @@ export function defaultAssetDirs(): string[] {
   const xdg = process.env['XDG_CONFIG_HOME'];
   if (xdg) dirs.push(join(xdg, 'terpix', 'assets'));
   dirs.push(join(homedir(), '.config', 'terpix', 'assets'));
-  // Generated sprites (from `plan --gen-assets`) cache here; load them so a
-  // plan that references a generated asset renders standalone.
-  const cacheBase = process.env['XDG_CACHE_HOME'] || join(homedir(), '.cache');
-  dirs.push(join(cacheBase, 'terpix', 'assets'));
+  if (!opts.noGlobalCache) {
+    // Generated sprites (from `plan --gen-assets`) cache here; load them so a
+    // plan that references a generated asset renders standalone — unless the
+    // caller opted out (project mode wants strict isolation).
+    const cacheBase = process.env['XDG_CACHE_HOME'] || join(homedir(), '.cache');
+    dirs.push(join(cacheBase, 'terpix', 'assets'));
+  }
   return dirs;
 }
 
 export function loadUserAssets(opts: LoadOpts = {}): LoadReport {
   const report: LoadReport = { loaded: [], errors: [], scanned: [] };
-  const dirs = [...defaultAssetDirs(), ...(opts.extraDirs ?? [])];
+  const dirs = [
+    ...defaultAssetDirs(opts.noGlobalCache ? { noGlobalCache: true } : {}),
+    ...(opts.extraDirs ?? []),
+  ];
   const seen = new Set<string>();
   for (const dir of dirs) {
     if (seen.has(dir)) continue;

@@ -12,6 +12,23 @@ export interface AssetAddOpts {
   description: string;
   model?: string;
   visionModel?: string;
+  noVision?: boolean;
+}
+
+// Vision-model defaults per provider. The recognizability gate uses the same
+// OpenAI client / baseURL the gen model rides on, so the vision model must
+// live behind the same provider.
+function defaultVisionFor(kind: string): string | undefined {
+  switch (kind) {
+    case 'qwen':
+      return 'qwen-vl-plus';
+    case 'openai':
+      return 'gpt-4o-mini';
+    default:
+      // minimax / openai-compat: no safe default — caller must pass
+      // --vision-model if they want a gate.
+      return undefined;
+  }
 }
 
 function sanitizeId(raw: string): string {
@@ -59,11 +76,25 @@ export async function assetAdd(opts: AssetAddOpts): Promise<void> {
     process.stderr.write(`terpix asset add: ${name}.json already exists — overwriting\n`);
   }
 
+  // Vision gate runs by default (qwen → qwen-vl-plus, openai → gpt-4o-mini),
+  // so a fresh sprite has to actually look like its label or the model keeps
+  // iterating. Pass --no-vision to skip (faster, cheaper, less reliable).
+  const visionModel = opts.noVision
+    ? undefined
+    : opts.visionModel ?? defaultVisionFor(resolved.kind);
+  if (!opts.noVision && !visionModel) {
+    process.stderr.write(
+      `terpix asset add: provider '${resolved.kind}' has no default vision model; ` +
+        `running without recognizability gate. Pass --vision-model <id> to enable.\n`,
+    );
+  } else if (visionModel) {
+    process.stderr.write(`terpix asset add: vision gate = ${visionModel}\n`);
+  }
   process.stderr.write(`terpix asset add: generating '${name}' (${opts.description})...\n`);
   const res = await generateAsset(name, opts.description, {
     client,
     genModel: model,
-    ...(opts.visionModel ? { visionModel: opts.visionModel } : {}),
+    ...(visionModel ? { visionModel } : {}),
     rounds: 3,
   });
   if ('error' in res) {

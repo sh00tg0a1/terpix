@@ -46,7 +46,7 @@ The scene DSL is **Scene v2 relational**: nodes declare WHERE-RELATIVE ("inside 
 | Command | When to use |
 |---|---|
 | `terpix new <dir> [title]` | Start a new film. Scaffolds `project.json` + `scenes/` + `assets/`. |
-| `terpix asset add <dir> <name> <description...>` | Explicitly generate one sprite the catalog lacks (e.g. "tent", "koi-fish"). Writes to `<dir>/assets/`. |
+| `terpix asset add <dir> <name> <description...>` | Explicitly generate one sprite the catalog lacks (e.g. "tent", "koi-fish"). Writes to `<dir>/assets/`. A vision recognizability gate (qwen-vl-plus on qwen, gpt-4o-mini on openai) runs by default — pass `--no-vision` to skip. |
 | `terpix scene add <dir> <prompt...> [--duration 6s] [--gen-assets]` | Plan ONE scene from NL. Writes `<dir>/scenes/NN-name.json` and appends to `project.json`. With `--gen-assets`, missing sprites are auto-generated into `<dir>/assets/`. |
 | `terpix film <dir> <prompt...> [--duration 30s --scenes 3 --gen-assets]` | Director pass: one LLM call breaks the idea into N beats, then loops `scene add` per beat. Best-effort — a single bad beat doesn't kill the run. |
 | `terpix render <dir> -o <path.mp4> [--size 1280x720] [--fps 24] [--audio bgm.mp3]` | Render the whole project to one mp4. Auto-detects a project dir. |
@@ -232,7 +232,7 @@ myfilm/
 | 命令 | 何时用 |
 |---|---|
 | `terpix new <dir> [title]` | 开新片。脚手架建 `project.json` + `scenes/` + `assets/` |
-| `terpix asset add <dir> <name> <description...>` | 显式生成 catalog 没有的 sprite(如 "tent"、"koi-fish")。写进 `<dir>/assets/` |
+| `terpix asset add <dir> <name> <description...>` | 显式生成 catalog 没有的 sprite(如 "tent"、"koi-fish")。写进 `<dir>/assets/`。**默认走 vision gate**(qwen 用 qwen-vl-plus,openai 用 gpt-4o-mini),`--no-vision` 跳过 |
 | `terpix scene add <dir> <prompt...> [--duration 6s] [--gen-assets]` | 规划**一个**分镜。写 `<dir>/scenes/NN-name.json`,自动追加到 `project.json`。加 `--gen-assets` 时缺的 sprite 自动生成 |
 | `terpix film <dir> <prompt...> [--duration 30s --scenes 3 --gen-assets]` | 导演 pass:一次 LLM 调用把想法拆成 N 段,然后循环 `scene add`。**尽力而为** —— 单段失败不杀全片 |
 | `terpix render <dir> -o <path.mp4> [--size 1280x720] [--fps 24] [--audio bgm.mp3]` | 整片渲染成一条 mp4。自动识别项目目录 |

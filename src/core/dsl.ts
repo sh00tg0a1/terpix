@@ -87,7 +87,10 @@ export const Layer = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('particles'),
-    kind: z.enum(['snow', 'rain', 'sparks', 'thrust']),
+    // `dust` = slow ambient drift in random directions (motes, plankton,
+    // pollen). Different from `snow` which always falls down. Use for
+    // atmospheric depth without committing to a specific weather event.
+    kind: z.enum(['snow', 'rain', 'sparks', 'thrust', 'dust']),
     count: z.number().int().positive().default(60),
     origin: Vec2.optional(),
     seed: z.number().int().default(1),

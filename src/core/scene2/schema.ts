@@ -99,7 +99,7 @@ export const Node = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('particles'),
-    particle: z.enum(['snow', 'rain', 'sparks', 'thrust']),
+    particle: z.enum(['snow', 'rain', 'sparks', 'thrust', 'dust']),
     count: z.number().int().positive().default(60),
     ...base,
   }),

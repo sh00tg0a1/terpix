@@ -136,8 +136,27 @@ interface SpriteState {
   depth: number;
 }
 
-function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteState {
-  const sorted = [...keyframes].sort((a, b) => a.tMs - b.tMs);
+// Sprites face +x by convention (asset-gen forces "head right" on bitmap
+// gen). When a sprite has meaningful horizontal travel, facing must match
+// travel direction or the sprite swims backward. LLM planners sometimes
+// emit per-keyframe `flipX` that contradicts the travel direction; we
+// override that here. Static (single-keyframe / negligible-dx) sprites keep
+// whatever `flipX` was authored, since there's no "direction" to derive.
+const TRAVEL_THRESHOLD = 0.05; // fraction of frame width
+function effectiveFlipX(keyframes: KeyframeT[]): boolean {
+  if (keyframes.length < 2) return keyframes[0]?.flipX ?? false;
+  const first = keyframes[0]!.x;
+  const last = keyframes[keyframes.length - 1]!.x;
+  if (first === undefined || last === undefined) return keyframes[0]!.flipX ?? false;
+  const dx = last - first;
+  if (Math.abs(dx) < TRAVEL_THRESHOLD) return keyframes[0]!.flipX ?? false;
+  return dx < 0;
+}
+
+// Look up the (prev, next) keyframe pair for a given time. Used twice per
+// frame: once with `tMs` for position/scale, once with `tMs+phase` for
+// rotation so siblings don't share the same rotation phase.
+function bracket(sorted: KeyframeT[], tMs: number): { prev: KeyframeT; next: KeyframeT } {
   let prev = sorted[0]!;
   let next = sorted[sorted.length - 1]!;
   for (let i = 0; i < sorted.length - 1; i++) {
@@ -147,17 +166,45 @@ function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteS
       break;
     }
   }
+  return { prev, next };
+}
+
+function sampleAt(prev: KeyframeT, next: KeyframeT, tMs: number, easing: Ease): number {
   const span = next.tMs - prev.tMs;
   const raw = span === 0 ? 0 : (tMs - prev.tMs) / span;
-  const t = ease(raw, easing);
+  return ease(raw, easing);
+}
+
+function interpolate(
+  keyframes: KeyframeT[],
+  tMs: number,
+  easing: Ease,
+  rotationPhaseMs = 0,
+): SpriteState {
+  const sorted = [...keyframes].sort((a, b) => a.tMs - b.tMs);
+  // ease applies per keyframe-PAIR. With easeInOut on every pair, velocity
+  // hits zero at every interior keyframe — a 5-keyframe wobble visibly
+  // pauses 4 times. The LLM means "smooth start/end", not "stutter at every
+  // interior point", so we collapse interior pairs to linear when there are
+  // more than 2 keyframes (paths and wobbles). Two-keyframe motions keep
+  // the authored ease.
+  const segmentEase: Ease = sorted.length > 2 ? 'linear' : easing;
+  const { prev, next } = bracket(sorted, tMs);
+  const t = sampleAt(prev, next, tMs, segmentEase);
+  // Rotation lookup uses a phase-shifted time so siblings of the same asset
+  // don't peak their wobble at the same moment. Clamp to keyframe range so
+  // we never wrap into a discontinuity.
+  const firstMs = sorted[0]!.tMs;
+  const lastMs = sorted[sorted.length - 1]!.tMs;
+  const rotMs = Math.max(firstMs, Math.min(lastMs, tMs + rotationPhaseMs));
+  const rot = bracket(sorted, rotMs);
+  const rt = sampleAt(rot.prev, rot.next, rotMs, segmentEase);
   return {
     x: lerp(prev.x ?? 0.5, next.x ?? prev.x ?? 0.5, t),
     y: lerp(prev.y ?? 0.5, next.y ?? prev.y ?? 0.5, t),
     scale: lerp(prev.scale ?? 1, next.scale ?? prev.scale ?? 1, t),
-    rotation: lerp(prev.rotation ?? 0, next.rotation ?? prev.rotation ?? 0, t),
-    // flipX is a step value — snap to `prev` until the next keyframe, since
-    // mirroring mid-tween would look like a sprite turning inside-out.
-    flipX: prev.flipX ?? next.flipX ?? false,
+    rotation: lerp(rot.prev.rotation ?? 0, rot.next.rotation ?? rot.prev.rotation ?? 0, rt),
+    flipX: effectiveFlipX(sorted),
     opacity: lerp(prev.opacity ?? 1, next.opacity ?? prev.opacity ?? 1, t),
     depth: lerp(prev.depth ?? 0, next.depth ?? prev.depth ?? 0, t),
   };
@@ -187,16 +234,40 @@ function requireAsset(name: string) {
   return entry;
 }
 
+interface SiblingAdjust {
+  rotationPhaseMs: number;
+  dxFrac: number;
+  dyFrac: number;
+  scaleMul: number;
+  rotationOffsetDeg: number;
+}
+
+const NO_ADJUST: SiblingAdjust = {
+  rotationPhaseMs: 0,
+  dxFrac: 0,
+  dyFrac: 0,
+  scaleMul: 1,
+  rotationOffsetDeg: 0,
+};
+
 // A sprite's own geometry from its keyframes (before any relational placement).
-function baseSpriteGeom(layer: SpriteLayer, buf: PixelBuffer, camera: CameraT, tMs: number): SpriteGeom {
-  const state = interpolate(layer.keyframes, tMs, layer.ease);
-  const cx = state.x * buf.w;
-  const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
+function baseSpriteGeom(
+  layer: SpriteLayer,
+  buf: PixelBuffer,
+  camera: CameraT,
+  tMs: number,
+  adjust: SiblingAdjust = NO_ADJUST,
+): SpriteGeom {
+  const state = interpolate(layer.keyframes, tMs, layer.ease, adjust.rotationPhaseMs);
+  const cx = (state.x + adjust.dxFrac) * buf.w;
+  const baseSize = state.scale * adjust.scaleMul * Math.min(buf.w, buf.h) * 0.2;
+  const y = state.y + adjust.dyFrac;
+  const rotation = state.rotation + adjust.rotationOffsetDeg;
   if (camera.projection === 'iso') {
-    const p = projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h);
-    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation: state.rotation, flipX: state.flipX };
+    const p = projectIso(y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h);
+    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation, flipX: state.flipX };
   }
-  return { cx, cy: state.y * buf.h, size: baseSize, opacity: state.opacity, rotation: state.rotation, flipX: state.flipX };
+  return { cx, cy: y * buf.h, size: baseSize, opacity: state.opacity, rotation, flipX: state.flipX };
 }
 
 // Where a sprite "sits" within its own bbox, used as the contact point when it
@@ -210,8 +281,26 @@ function attachPoint(asset: string): [number, number] {
 // Resolve a sprite that declares `on`: land its attach point on the target's
 // named point. Pure 2D placement — the target's geometry and named point
 // decide where the child sits; the child keeps its own size.
-function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: SpriteLayer }, buf: PixelBuffer, camera: CameraT, tMs: number, extraDx = 0): SpriteGeom {
-  const childBase = baseSpriteGeom(layer, buf, camera, tMs);
+function placeOnGeom(
+  layer: SpriteLayer,
+  target: { geom: SpriteGeom; layer: SpriteLayer },
+  buf: PixelBuffer,
+  camera: CameraT,
+  tMs: number,
+  extraDx = 0,
+  adjust: SiblingAdjust = NO_ADJUST,
+): SpriteGeom {
+  // On-target sprites must keep deterministic geometry — both scale and
+  // position drive the attachment math (a 12%-bigger bowl's anchor would
+  // sit a pixel below its smaller neighbor, breaking "bowls on the same
+  // surface"). Only the rotation phase survives.
+  const childBase = baseSpriteGeom(layer, buf, camera, tMs, {
+    rotationPhaseMs: adjust.rotationPhaseMs,
+    dxFrac: 0,
+    dyFrac: 0,
+    scaleMul: 1,
+    rotationOffsetDeg: 0,
+  });
   const on = layer.on!;
   const tGeom = target.geom;
   const point = getAsset(target.layer.asset)?.metrics?.points?.[on.at] ?? [0.5, 0.5];
@@ -241,6 +330,15 @@ export function resolveSpriteGeoms(
 ): Map<LayerT, SpriteGeom> {
   const out = new Map<LayerT, SpriteGeom>();
   const byId = new Map<string, { geom: SpriteGeom; layer: SpriteLayer }>();
+  // Sibling phase offset: LLM planners often emit N sprite layers of the
+  // same asset moving in perfect lockstep (3 koi at y=0.3,0.5,0.7 sharing
+  // identical x keyframes). Identical motion reads as mechanical, not
+  // organic. We can't safely shift travel time (would change WHERE a
+  // sprite is at a given frame, breaking layout intent), but we CAN shift
+  // the rotation-sample time per sibling so wobble peaks staggered. A 250ms
+  // offset across siblings is invisible at rest but reads as "natural" once
+  // anything oscillates.
+  const adjustMap = buildSiblingAdjustMap(layers);
   let pending: SpriteLayer[] = [];
   for (const layer of layers) {
     if (layer.type !== 'sprite') continue;
@@ -248,7 +346,7 @@ export function resolveSpriteGeoms(
       pending.push(layer);
       continue;
     }
-    const g = baseSpriteGeom(layer, buf, camera, tMs);
+    const g = baseSpriteGeom(layer, buf, camera, tMs, adjustMap.get(layer) ?? NO_ADJUST);
     out.set(layer, g);
     if (layer.id) byId.set(layer.id, { geom: g, layer });
   }
@@ -282,7 +380,7 @@ export function resolveSpriteGeoms(
         next.push(layer);
         continue;
       }
-      const g = placeOnGeom(layer, target, buf, camera, tMs, autoDx.get(layer) ?? 0);
+      const g = placeOnGeom(layer, target, buf, camera, tMs, autoDx.get(layer) ?? 0, adjustMap.get(layer) ?? NO_ADJUST);
       out.set(layer, g);
       if (layer.id) byId.set(layer.id, { geom: g, layer });
     }
@@ -290,7 +388,79 @@ export function resolveSpriteGeoms(
     pending = next;
   }
   // Unresolved `on` layers (bad/cyclic ref): fall back to their own keyframes.
-  for (const layer of pending) out.set(layer, baseSpriteGeom(layer, buf, camera, tMs));
+  for (const layer of pending) out.set(layer, baseSpriteGeom(layer, buf, camera, tMs, adjustMap.get(layer) ?? NO_ADJUST));
+  return out;
+}
+
+const STAGGER_MS = 250;
+const POS_JITTER_FRAC = 0.055; // ±5.5% of frame on each axis (was 2.5%)
+const SCALE_JITTER = 0.28; // ±28% of base scale (was 12%)
+const ROT_JITTER_DEG = 12; // ±12° resting tilt — breaks "all sprites upright"
+
+// Deterministic small PRNG. Same hash → same offsets so a sprite doesn't
+// jiggle frame-to-frame.
+function hash32(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h;
+}
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Per-sibling adjustments to break the lockstep that LLM planners produce
+ * when emitting N sprites of the same asset (3 koi sharing keyframes; 4
+ * lotus on a perfect row). For each group of same-asset siblings:
+ *  - rotationPhaseMs fans out symmetrically so wobble peaks at different times
+ *  - dxFrac / dyFrac add a deterministic ±2.5% jitter (seeded by asset+index)
+ *    so a "row of lotus" reads as scattered, not stenciled
+ *  - scaleMul adds ±12% size variation so identical sprites don't look like
+ *    a copy-paste
+ * Singletons get NO_ADJUST so a single hero sprite stays exactly where the
+ * plan put it.
+ */
+function buildSiblingAdjustMap(layers: LayerT[]): Map<SpriteLayer, SiblingAdjust> {
+  const byAsset = new Map<string, SpriteLayer[]>();
+  for (const layer of layers) {
+    if (layer.type !== 'sprite') continue;
+    const g = byAsset.get(layer.asset);
+    if (g) g.push(layer);
+    else byAsset.set(layer.asset, [layer]);
+  }
+  const out = new Map<SpriteLayer, SiblingAdjust>();
+  for (const [asset, group] of byAsset) {
+    if (group.length < 2) continue;
+    const center = (group.length - 1) / 2;
+    group.forEach((layer, i) => {
+      const rng = mulberry32(hash32(`${asset}#${i}`));
+      // Travelers (multi-keyframe with horizontal motion) shouldn't tilt
+      // — a fish is already wobbling about its motion axis. Static sprites
+      // (a row of resting lotus) do get a resting tilt for "scattered".
+      const isStatic = !(
+        layer.keyframes.length > 1 &&
+        Math.abs((layer.keyframes[layer.keyframes.length - 1]!.x ?? 0) - (layer.keyframes[0]!.x ?? 0)) > 0.05
+      );
+      out.set(layer, {
+        rotationPhaseMs: Math.round((i - center) * STAGGER_MS),
+        dxFrac: (rng() * 2 - 1) * POS_JITTER_FRAC,
+        dyFrac: (rng() * 2 - 1) * POS_JITTER_FRAC,
+        scaleMul: 1 + (rng() * 2 - 1) * SCALE_JITTER,
+        rotationOffsetDeg: isStatic ? (rng() * 2 - 1) * ROT_JITTER_DEG : 0,
+      });
+    });
+  }
   return out;
 }
 
@@ -523,6 +693,15 @@ function drawParticlesLayer(
       vx = -40 - rand() * 40;
       vy = (rand() - 0.5) * 5;
       color = [255, 200, 80];
+    } else if (layer.kind === 'dust') {
+      // Slow drift in random direction — looks like floating motes /
+      // suspended pollen / underwater plankton. Pale neutral so it reads
+      // as atmosphere over any background.
+      const ang = rand() * Math.PI * 2;
+      const sp = 2 + rand() * 6;
+      vx = Math.cos(ang) * sp;
+      vy = Math.sin(ang) * sp;
+      color = [220, 215, 195];
     }
     const t = tMs / 1000;
     const x0 = (layer.origin?.x ?? rand()) * buf.w;

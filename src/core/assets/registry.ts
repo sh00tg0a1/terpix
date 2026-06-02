@@ -8,6 +8,7 @@ export interface DrawCtx {
   size: number;
   color: [number, number, number];
   rotation?: number;
+  flipX?: boolean;
   opacity?: number;
 }
 

@@ -205,26 +205,59 @@ function emitSprite(node: Extract<NodeT, { kind: 'sprite' }>, ctx: BeatCtx): unk
   bx += node.place.dx ?? 0;
   by += node.place.dy ?? 0;
 
-  // Animated: travel from start→end (two keyframes). Copies fan out along the
-  // axis the motion doesn't travel so a repeated mover doesn't stack.
+  // Animated: travel from start→end. Copies fan out along the axis the motion
+  // doesn't travel so a repeated mover doesn't stack. We emit MULTIPLE
+  // keyframes when `wobble > 0` so the sprite oscillates its rotation as it
+  // travels (swimming fish, flapping bird) instead of sliding sideways like
+  // a decal. `flipX` is auto-derived from horizontal travel direction so a
+  // sprite faces the way it's going, and alternates across `repeat` copies
+  // so a school of fish isn't N identical clones.
   if (node.motion) {
     const p = motionPath(node.motion.kind, node.motion.dir, bx, by);
     const offs = spread(n, node.distribute?.gap ?? 0.16);
-    return offs.map((o) => {
+    const dirRaw = node.motion.dir;
+    const goingLeft =
+      dirRaw === 'left' || dirRaw === 'top-left' || dirRaw === 'bottom-left';
+    const wobble = node.motion.wobble ?? 0;
+    return offs.map((o, idx) => {
       const sx = p.perp === 'x' ? p.sx + o : p.sx;
       const sy = p.perp === 'y' ? p.sy + o : p.sy;
       const ex = p.perp === 'x' ? p.ex + o : p.ex;
       const ey = p.perp === 'y' ? p.ey + o : p.ey;
+      // Alternate flipX across copies of a school so they don't all face
+      // identically; first copy honors direction, the rest stagger.
+      const flipX = n > 1 ? goingLeft !== (idx % 2 === 1) : goingLeft;
+      const baseKf = (t: number) => {
+        const u = ctx.durationMs === 0 ? 0 : t / ctx.durationMs;
+        return {
+          tMs: t,
+          x: sx + (ex - sx) * u,
+          y: sy + (ey - sy) * u,
+          scale: node.scale,
+          ...depthKf(node),
+        };
+      };
+      const keyframes: Record<string, unknown>[] = [];
+      if (wobble > 0) {
+        // 5 keyframes ⇒ 4 sub-spans; rotation traces 0 → +w → 0 → -w → 0
+        // (closes the cycle so a looped scene stays clean).
+        const steps = 4;
+        const cycle = [0, wobble, 0, -wobble, 0];
+        for (let k = 0; k <= steps; k++) {
+          const t = (ctx.durationMs * k) / steps;
+          keyframes.push({ ...baseKf(t), rotation: cycle[k], flipX });
+        }
+      } else {
+        keyframes.push({ ...baseKf(0), flipX });
+        keyframes.push({ ...baseKf(ctx.durationMs), flipX });
+      }
       return {
         type: 'sprite',
         asset: node.asset,
         ...(node.color ? { color: node.color } : {}),
         ...(node.id && single ? { id: node.id } : {}),
         ease: node.motion!.ease,
-        keyframes: [
-          { tMs: 0, x: sx, y: sy, scale: node.scale, ...depthKf(node) },
-          { tMs: ctx.durationMs, x: ex, y: ey, scale: node.scale, ...depthKf(node) },
-        ],
+        keyframes,
       };
     });
   }

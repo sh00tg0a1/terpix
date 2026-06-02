@@ -68,6 +68,11 @@ export const Motion = z
       )
       .optional(),
     ease: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).default('easeInOut'),
+    // Rotation oscillation in degrees. Compiles to multi-keyframe rotation
+    // tween so a swimming fish / flapping bird looks alive instead of sliding
+    // sideways like a decal. Typical: 6 (subtle) — 18 (cartoony). Omit for
+    // rigid travelers (rockets, balls).
+    wobble: z.number().min(0).max(45).optional(),
   })
   .optional();
 

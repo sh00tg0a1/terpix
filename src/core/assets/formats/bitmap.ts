@@ -92,6 +92,80 @@ export function whiteKey(
   return out;
 }
 
+/**
+ * Background removal by flooding from the image edges. Catches non-white
+ * backgrounds the simple whiteKey misses — Qwen sometimes paints a "lotus"
+ * on a pale-blue water square because it can't separate subject from
+ * context. Any pixel reachable from an edge whose color stays within
+ * `tol` of the seed corner color becomes transparent. The subject, even
+ * if it touches an edge, only loses the strip of edge pixels — the bbox
+ * crop then trims that.
+ *
+ * Tolerance is in Manhattan RGB units (sum of |dr|+|dg|+|db|). 60 catches
+ * a soft gradient sky / water without eating into a saturated sprite.
+ */
+export function cornerFloodKey(
+  w: number,
+  h: number,
+  rgba: Uint8Array,
+  tol = 60,
+): Uint8Array {
+  const out = new Uint8Array(rgba.length);
+  out.set(rgba);
+  const visited = new Uint8Array(w * h);
+  // Seed color: average the 4 corners so we are robust to one corner
+  // accidentally landing on the subject.
+  const corners: Array<[number, number]> = [
+    [0, 0],
+    [w - 1, 0],
+    [0, h - 1],
+    [w - 1, h - 1],
+  ];
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  for (const [cx, cy] of corners) {
+    const j = (cy * w + cx) * 4;
+    sr += out[j]!;
+    sg += out[j + 1]!;
+    sb += out[j + 2]!;
+  }
+  const seedR = sr / 4;
+  const seedG = sg / 4;
+  const seedB = sb / 4;
+  // BFS from every edge pixel that matches the seed.
+  const stack: number[] = [];
+  function tryPush(x: number, y: number): void {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const idx = y * w + x;
+    if (visited[idx]) return;
+    const j = idx * 4;
+    const d = Math.abs(out[j]! - seedR) + Math.abs(out[j + 1]! - seedG) + Math.abs(out[j + 2]! - seedB);
+    if (d > tol) return;
+    visited[idx] = 1;
+    out[j + 3] = 0;
+    stack.push(idx);
+  }
+  for (let x = 0; x < w; x++) {
+    tryPush(x, 0);
+    tryPush(x, h - 1);
+  }
+  for (let y = 0; y < h; y++) {
+    tryPush(0, y);
+    tryPush(w - 1, y);
+  }
+  while (stack.length) {
+    const idx = stack.pop()!;
+    const x = idx % w;
+    const y = (idx - x) / w;
+    tryPush(x - 1, y);
+    tryPush(x + 1, y);
+    tryPush(x, y - 1);
+    tryPush(x, y + 1);
+  }
+  return out;
+}
+
 export function downsampleNN(
   srcW: number,
   srcH: number,
@@ -120,9 +194,19 @@ export interface CookOpts {
   maxSide?: number;
   /** Per-channel tolerance for white-keying. Default 16. */
   whiteTol?: number;
+  /** Manhattan RGB tolerance for the corner flood-fill. Default 60. */
+  floodTol?: number;
+  /** Skip the corner flood-fill (only use white threshold). */
+  noFlood?: boolean;
 }
 
-/** Produce a small, transparent-background sprite from raw model RGBA. */
+/**
+ * Produce a small, transparent-background sprite from raw model RGBA.
+ * Background removal is two-stage: flood-fill from the corners catches
+ * non-white backgrounds (Qwen-Image often paints a "lotus" on pale water
+ * because it can't isolate subject from context), then a plain white
+ * threshold cleans up any residual near-white speckle in the interior.
+ */
 export function cookSprite(
   srcW: number,
   srcH: number,
@@ -130,7 +214,10 @@ export function cookSprite(
   opts: CookOpts = {},
 ): { w: number; h: number; rgba: Uint8Array } {
   const maxSide = opts.maxSide ?? 96;
-  const keyed = whiteKey(srcW, srcH, src, opts.whiteTol ?? 16);
+  const flooded = opts.noFlood
+    ? src
+    : cornerFloodKey(srcW, srcH, src, opts.floodTol ?? 60);
+  const keyed = whiteKey(srcW, srcH, flooded, opts.whiteTol ?? 16);
   const bbox = opaqueBbox(srcW, srcH, keyed);
   let cropW: number;
   let cropH: number;
@@ -156,27 +243,51 @@ export function cookSprite(
 }
 
 // Bitmap sprites carry intrinsic colors, so DrawCtx.color (the layer "tint") is
-// IGNORED. Rotation is unsupported — orientation comes from the prompt.
+// IGNORED. Rotation and flipX are honored via reverse-mapping: for every
+// output pixel, undo the affine transform to find the source-image sample.
+// This is the standard "destination → source" trick that keeps the output
+// hole-free regardless of angle / mirror.
 export function makeBitmapDrawer(asset: BitmapAsset): (ctx: DrawCtx) => void {
   return function drawBitmap(ctx: DrawCtx): void {
     const { w: bw, h: bh, rgba } = asset;
     const scale = ctx.size / Math.max(bw, bh);
     const drawW = Math.max(1, Math.round(bw * scale));
     const drawH = Math.max(1, Math.round(bh * scale));
-    const offX = Math.round(ctx.cx - drawW / 2);
-    const offY = Math.round(ctx.cy - drawH / 2);
     const alphaMul = Math.max(0, Math.min(1, ctx.opacity ?? 1));
-    for (let y = 0; y < drawH; y++) {
-      const sy = Math.min(bh - 1, Math.floor((y / drawH) * bh));
-      for (let x = 0; x < drawW; x++) {
-        const sx = Math.min(bw - 1, Math.floor((x / drawW) * bw));
+    // Rotation is degrees clockwise about the sprite center, matching the
+    // shape drawer convention so plans work identically across both sources.
+    const rot = ((ctx.rotation ?? 0) * Math.PI) / 180;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const rotating = rot !== 0;
+    const flip = ctx.flipX ?? false;
+    // Bounding box in output space: rotating a `drawW × drawH` rect by `rot`
+    // grows the AABB by |cos|+|sin| in each dimension. Without expanding the
+    // iteration window, the rotated corners would be clipped.
+    const halfW = drawW / 2;
+    const halfH = drawH / 2;
+    const bboxHalfW = rotating ? Math.ceil(Math.abs(cos) * halfW + Math.abs(sin) * halfH) : halfW;
+    const bboxHalfH = rotating ? Math.ceil(Math.abs(sin) * halfW + Math.abs(cos) * halfH) : halfH;
+    for (let oy = -bboxHalfH; oy < bboxHalfH; oy++) {
+      for (let ox = -bboxHalfW; ox < bboxHalfW; ox++) {
+        // Inverse rotation: bring the output pixel back into sprite-local space.
+        const lx = rotating ? cos * ox + sin * oy : ox;
+        const ly = rotating ? -sin * ox + cos * oy : oy;
+        // lx,ly in [-halfW..halfW] × [-halfH..halfH] now; map to source uv.
+        const u = lx + halfW;
+        const v = ly + halfH;
+        if (u < 0 || v < 0 || u >= drawW || v >= drawH) continue;
+        let sxNorm = u / drawW;
+        if (flip) sxNorm = 1 - sxNorm;
+        const sx = Math.min(bw - 1, Math.floor(sxNorm * bw));
+        const sy = Math.min(bh - 1, Math.floor((v / drawH) * bh));
         const i = (sy * bw + sx) * 4;
         const a = rgba[i + 3]!;
         if (a === 0) continue;
         setPixel(
           ctx.buf,
-          offX + x,
-          offY + y,
+          Math.round(ctx.cx + ox),
+          Math.round(ctx.cy + oy),
           rgba[i]!,
           rgba[i + 1]!,
           rgba[i + 2]!,

@@ -13,12 +13,15 @@ import { registerAsset } from '../../core/assets/registry.js';
 import { friendlyApiError } from './errors.js';
 import { qwenGenerateImage, type QwenImageCfg } from './qwen-image.js';
 
-// Style wrapper kept short and constraint-heavy: we want a small flat 2D
-// sprite, not a beautiful illustration. Adjectives that pull toward "scene"
-// (lighting, environment, perspective) are deliberately excluded.
+// Style wrapper: tell the model we want a sticker / die-cut icon, NOT a
+// beautiful illustration. "Sticker" / "icon" framings naturally cut the
+// model's instinct to bring in context (a lotus on water, a fish in a pond)
+// because stickers are by definition isolated. Line-art keeps the sprite
+// small and recognizable after downsample.
 const PROMPT_PREFIX =
-  '2D 平面卡通插画，单一主体居中，纯白色背景 #ffffff，侧视图，简洁线条，扁平色块，' +
-  '无阴影，无地面，无文字，无水印，无装饰，无背景元素';
+  '极简简笔画风格，单色线稿配少量平涂色块，单一主体居中占满画面，' +
+  '纯白色背景 #ffffff，模切贴纸 die-cut sticker 样式，无任何场景或环境元素，' +
+  '无阴影，无地面，无水，无水面，无云，无文字，无水印，无装饰边框';
 
 function buildPrompt(description: string): string {
   return `${PROMPT_PREFIX}。\n主体: ${description}`;

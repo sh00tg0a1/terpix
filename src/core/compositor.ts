@@ -122,7 +122,7 @@ function drawScatterLayer(
   }
   instances.sort((a, b) => a.cy - b.cy);
   for (const inst of instances) {
-    entry.draw({ buf, cx: inst.cx, cy: inst.cy, size: inst.size, color, rotation: 0, opacity: inst.opacity });
+    entry.draw({ buf, cx: inst.cx, cy: inst.cy, size: inst.size, color, rotation: 0, flipX: false, opacity: inst.opacity });
   }
 }
 
@@ -131,6 +131,7 @@ interface SpriteState {
   y: number;
   scale: number;
   rotation: number;
+  flipX: boolean;
   opacity: number;
   depth: number;
 }
@@ -154,6 +155,9 @@ function interpolate(keyframes: KeyframeT[], tMs: number, easing: Ease): SpriteS
     y: lerp(prev.y ?? 0.5, next.y ?? prev.y ?? 0.5, t),
     scale: lerp(prev.scale ?? 1, next.scale ?? prev.scale ?? 1, t),
     rotation: lerp(prev.rotation ?? 0, next.rotation ?? prev.rotation ?? 0, t),
+    // flipX is a step value — snap to `prev` until the next keyframe, since
+    // mirroring mid-tween would look like a sprite turning inside-out.
+    flipX: prev.flipX ?? next.flipX ?? false,
     opacity: lerp(prev.opacity ?? 1, next.opacity ?? prev.opacity ?? 1, t),
     depth: lerp(prev.depth ?? 0, next.depth ?? prev.depth ?? 0, t),
   };
@@ -167,6 +171,7 @@ interface SpriteGeom {
   size: number;
   opacity: number;
   rotation: number;
+  flipX: boolean;
 }
 
 function requireAsset(name: string) {
@@ -189,9 +194,9 @@ function baseSpriteGeom(layer: SpriteLayer, buf: PixelBuffer, camera: CameraT, t
   const baseSize = state.scale * Math.min(buf.w, buf.h) * 0.2;
   if (camera.projection === 'iso') {
     const p = projectIso(state.y * buf.h, baseSize, state.opacity, state.depth, camera.tilt, buf.h);
-    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation: state.rotation };
+    return { cx, cy: p.cy, size: p.size, opacity: p.opacity, rotation: state.rotation, flipX: state.flipX };
   }
-  return { cx, cy: state.y * buf.h, size: baseSize, opacity: state.opacity, rotation: state.rotation };
+  return { cx, cy: state.y * buf.h, size: baseSize, opacity: state.opacity, rotation: state.rotation, flipX: state.flipX };
 }
 
 // Where a sprite "sits" within its own bbox, used as the contact point when it
@@ -221,6 +226,7 @@ function placeOnGeom(layer: SpriteLayer, target: { geom: SpriteGeom; layer: Spri
     size,
     opacity: childBase.opacity,
     rotation: childBase.rotation,
+    flipX: childBase.flipX,
   };
 }
 
@@ -290,9 +296,9 @@ export function resolveSpriteGeoms(
 
 function drawSpriteLayer(buf: PixelBuffer, layer: SpriteLayer, geom: SpriteGeom | undefined): void {
   const entry = requireAsset(layer.asset);
-  const g = geom ?? { cx: buf.w / 2, cy: buf.h / 2, size: Math.min(buf.w, buf.h) * 0.2, opacity: 1, rotation: 0 };
+  const g = geom ?? { cx: buf.w / 2, cy: buf.h / 2, size: Math.min(buf.w, buf.h) * 0.2, opacity: 1, rotation: 0, flipX: false };
   const color = hexToRgb(layer.color ?? '#cccccc');
-  entry.draw({ buf, cx: g.cx, cy: g.cy, size: g.size, color, rotation: g.rotation, opacity: g.opacity });
+  entry.draw({ buf, cx: g.cx, cy: g.cy, size: g.size, color, rotation: g.rotation, flipX: g.flipX, opacity: g.opacity });
 }
 
 // Target char-cell height as fraction of buffer height (glyph = 7 rows tall).

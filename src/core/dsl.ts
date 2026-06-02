@@ -10,6 +10,10 @@ export const Keyframe = z.object({
   y: z.number().optional(),
   scale: z.number().optional(),
   rotation: z.number().optional(),
+  // Mirror the sprite horizontally. Treated as step (non-interpolated) — the
+  // sprite is either flipped or not. Useful for varying instances of the same
+  // sprite (3 koi: head-left, head-right, head-left) without re-generating.
+  flipX: z.boolean().optional(),
   opacity: z.number().min(0).max(1).optional(),
   // Position into the scene's depth, 0 = nearest (front), 1 = farthest
   // (back). Only meaningful when the plan's `camera.projection` is "iso":
